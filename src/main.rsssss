@@ -1,0 +1,129 @@
+
+extern crate nom;
+use nom::*;
+#[derive(Debug,PartialEq)]
+pub struct Color {
+  pub red:   u8,
+  pub green: u8,
+  pub blue:  u8,
+}
+
+
+fn from_hex(input: &str) -> Result<u8, std::num::ParseIntError> {
+  u8::from_str_radix(input, 16)
+}
+
+fn is_hex_digit(c: char) -> bool {
+  c.is_digit(16)
+}
+
+
+
+named!(hex_primary<&str, u8>,
+    map_res!(take_while_m_n!(2, 2, is_hex_digit), from_hex)
+);
+
+named!(hex_color<&str, Color>,
+  do_parse!(
+           tag!("#")   >>
+    red:   hex_primary >>
+    green: hex_primary >>
+    blue:  hex_primary >>
+    (Color { red, green, blue })
+  )
+);
+
+
+/******************************************************/
+
+fn is_digit(c: char) -> bool { c.is_digit(10) }
+fn is_space(c: char) -> bool { nom::is_space(c as u8) }
+
+named!(spaces<&str, &str>, take_while!(is_space));
+
+fn to_number(c: &str) -> Result<i32, std::num::ParseIntError> { i32::from_str_radix(c, 10) }
+
+named!(number<&str, i32>, map_res!(take_while!(is_digit), to_number));
+
+#[cfg(test)]
+mod test2{
+  #[test]
+  fn name() {
+    
+  }
+}
+
+
+/******************************************************/
+
+type ExprResult = Result<ExprValue, ExprError>;
+
+#[derive(Debug, PartialEq)]
+pub enum ExprValue{
+    Int (i32),
+    Float (f32),
+    // Decimal(Decimal),
+    Str (String),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ExprError{
+    Std(String),
+}
+
+fn to_integer(input: &str) -> ExprResult {
+    match input.parse::<i32>() {
+        Ok(i) => Ok(ExprValue::Int(i)),
+        Err(_) => Err(ExprError::Std(format!("Unable to parse {}, to integer", input)))
+    }
+}
+
+fn char_is_digit(c: char) -> bool { 
+    c.is_numeric() 
+}
+
+named!(integer_primary<&str, ExprValue>,
+    map_res!(take_while!(char_is_digit), to_integer)
+);
+
+named!(abcd_parser, tag!("abcd")); 
+named!(take_10, take!(10));
+// named!(num_chars, take_while1!(char_is_digit));
+
+fn main() {
+  // let a  = "a";
+  // let i = 1;
+  // print!("{}{}", a, i );
+  // let test = integer_primary("165");
+  // assert_eq!(test, Ok(("", ExprValue::Int(1))));
+
+  // println!("{:?}", num_chars(b"10")) ;
+
+  // named!(multi< Vec<&str> >, many0!( map_res!(tag!( "abcd" ), ) ) );
+  // let a = b"abcdef";
+  // let b = b"abcdabcdef";
+  // let c = b"azerty";
+  // assert_eq!(multi(a), Ok((&b"ef"[..],     vec!["abcd"])));
+  // assert_eq!(multi(b), Ok((&b"ef"[..],     vec!["abcd", "abcd"])));
+  // assert_eq!(multi(c), Ok((&b"azerty"[..], Vec::new())));
+}
+
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn tes() {
+    assert_eq!(integer_primary("165"), Ok(("", ExprValue::Int(1))));
+  }
+
+  #[test]
+  fn parse_color() {
+    assert_eq!(hex_color("#2F14DF"), Ok(("", Color {
+      red: 47,
+      green: 20,
+      blue: 223,
+    })));
+  }
+}
