@@ -14,7 +14,7 @@ use nom::{
   error::{context, convert_error, ErrorKind, ParseError,VerboseError},
   multi::separated_list,
   number::complete::double,
-  sequence::{delimited, preceded, separated_pair, terminated},
+  sequence::{delimited, preceded, separated_pair, terminated, tuple, pair},
   Err, IResult,
 };
 use std::collections::HashMap;
@@ -22,12 +22,12 @@ use std::str;
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
-  Identifier(String),
   Str(String),
   Boolean(bool),
   Num(f64),
   Array(Vec<Expr>),
   Object(HashMap<String, Expr>),
+  FunctionCall(String, Vec<Expr>)
 }
 
 /// A nom parser has the following signature:
@@ -101,12 +101,12 @@ fn value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
   preceded(
     sp,
     alt((
-      map(identifier, |s| Expr::Identifier(String::from(s))),
       map(hash, Expr::Object),
       map(array, Expr::Array),
       map(string, |s| Expr::Str(String::from(s))),
       map(double, Expr::Num),
       map(boolean, Expr::Boolean),
+      map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
     )),
   )(i)
 }
@@ -114,8 +114,8 @@ fn value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
 /// the root element of a JSON parser is either an object or an array
 fn expr<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
   delimited(
-    sp,
-    alt((map(hash, Expr::Object), map(array, Expr::Array))),
+    opt(sp),
+    value,
     opt(sp),
   )(i)
 }
@@ -133,9 +133,41 @@ fn identifier<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a st
   )(i)
 }
 
+/// parameters between parenthesis
+fn parameters<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
+  context(
+    "parameters",
+    preceded(char('('),
+    cut(terminated(
+      separated_list(preceded(sp, char(',')), value),
+      preceded(sp, char(')'))))
+  ))(i)
+}
+
+fn function_call<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (&'a str,  Vec<Expr>), E> {
+  pair(identifier, parameters)(i)
+}
+
+// fn function_call<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<(&'a str, (&'a str, Vec<Expr>)), E> {
+//   pair(identifier, parameters)(i)
+
+
+// //   Ok(("", vec![Expr::Boolean(true)]))
+// }
 
 fn main() {
-  println!("{:?}", expr::<(&str, ErrorKind)>("[ test ]"));
+
+  // let parser = separated_pair(tag("abc"), tag("|"), tag("efg"));
+  
+  // let parser = tuple::<(&str, ErrorKind)>((identifier, identifier));
+
+  //  let application_inner = map(tuple((identifier, identifier)), |(head, tail)| {
+  //     ""
+  //   });
+  // finally, we wrap it in an s-expression
+  // s_exp(application_inner)(i);
+
+  println!("{:?}", expr::<(&str, ErrorKind)>("test(42, \"a\", func2(5))"));
 
 
   // let data = "  { \"a\"\t: 42,
