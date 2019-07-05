@@ -59,7 +59,7 @@ pub enum Expr {
   Array(Vec<Expr>),
   Object(HashMap<String, Expr>),
   FunctionCall(String, Vec<Expr>),
-  BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
+  // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
 }
 
 
@@ -182,6 +182,7 @@ fn function_call<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (&'
   pair(identifier, parameters)(i)
 }
 
+// https://dev.to/living_syn/calling-rust-from-c-6hk
 
 fn main() {
 
@@ -189,7 +190,7 @@ fn main() {
   
   funcs.insert(
     "test".to_string(),
-    Box::new(| v:&Vec<Expr> | v.first().ok_or("".to_string()))
+    Box::new(| v:&Vec<Expr> | Ok(&Expr::Boolean(true)))
   );
 
   funcs.insert(
@@ -202,26 +203,29 @@ fn main() {
     .1;
   
   // for _ in 0..10_000_00 {
-    let result = execExpr(&expr, &funcs);
+    let result = exec_expr(&expr, &funcs);
     print!("{:?}", result);  
   // }
 
 }
 
-fn execExpr<'a>(expr : &'a Expr , funcs : &HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>) -> Result<&'a Expr, String>
+//https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
+//
+
+fn exec_expr<'a>(expr : &'a Expr , funcs : &HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>) -> Result<&'a Expr, String>
 {
   match expr {
     Expr::Str(_) => Ok(expr),
-    Expr::Boolean(_) => Ok(expr),
+    Expr::Boolean(_) =>  Ok(expr),
     Expr::Num(_) => Ok(expr),
     Expr::Array(_) => Ok(expr),
     Expr::Object(_) => Ok(expr),
-    Expr::BinaryOperator(_, _, _) => Ok(expr),
+    // Expr::BinaryOperator(_, _, _) => Ok(expr),
     Expr::FunctionCall(name, parameters) => {
       match funcs.get(name) {
         Some(fnc) => {
           let call_result = fnc(parameters)?;
-          execExpr(call_result, funcs)
+          exec_expr(call_result, funcs)
         },
         None => Err(format!("Unable to find the function named '{}'", name))
       }

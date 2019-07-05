@@ -1,5 +1,5 @@
 [package]
-name = "rustlyn"
+name = "csharp-expr"
 version = "0.1.0"
 authors = ["Jêrome Rx <jerome+git@rouaix.eu>"]
 edition = "2018"
