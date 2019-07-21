@@ -190,7 +190,7 @@ fn main() {
   
   funcs.insert(
     "test".to_string(),
-    Box::new(| v:&Vec<Expr> | Ok(&Expr::Boolean(true)))
+    Box::new(| _:&Vec<Expr> | Ok(&Expr::Boolean(true)))
   );
 
   funcs.insert(
