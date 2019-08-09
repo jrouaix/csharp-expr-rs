@@ -224,8 +224,12 @@ pub extern fn parse_exec_expr<'a>(expression : &'a str, funcs : &HashMap<String,
 {
   let expr = parse_expr(expression).unwrap();
   let result = exec_expr(&expr, &funcs).unwrap();
-  
-  match result {
+  expr_to_string(result)
+}
+
+fn expr_to_string<'a>(expr : &'a Expr) -> String
+{
+  match expr {
     Expr::Str(s) => s.to_string(),
     Expr::Boolean(b) => b.to_string(),
     Expr::Num(n) => n.to_string(),
@@ -302,8 +306,45 @@ pub extern fn ffi_parse_expr(expression: *const c_char) -> ExpressionFFIPointer 
 }
 
 #[no_mangle]
-pub extern fn free_expr(ffi_struct: ExpressionFFIPointer) {
+pub extern fn ffi_exec_expr(ffi_struct: ExpressionFFIPointer) -> *mut c_char {
+  
+  let expr = unsafe { Box::from_raw(ffi_struct.expression) };
+
+  let mut funcs : HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>  = HashMap::new();
+
+   CString::new("test").unwrap().into_raw()
+    
+  // funcs.insert(
+  //   "true".to_string(),
+  //   Box::new(| _:&Vec<Expr> | Ok(&Expr::Boolean(true)))
+  // );
+
+  // funcs.insert(
+  //   "first".to_string(),
+  //   Box::new(| v:&Vec<Expr> | v.first().ok_or("There was no first value.".to_string()))
+  // );
+
+  // let result = exec_expr(&expr, &funcs).unwrap();
+  // let s_result = expr_to_string(result);
+  
+  // Box::into_raw(expr); // so the memory is not freed and the box is still living
+  // let c_str_result = CString::new(s_result).unwrap();
+  // c_str_result.into_raw()
+}
+
+
+
+#[no_mangle]
+pub extern fn ffi_free_expr(ffi_struct: ExpressionFFIPointer) {
   let b = unsafe { Box::from_raw(ffi_struct.expression) };
+}
+
+#[no_mangle]
+pub extern fn ffi_free_cstring(s: *mut c_char) {
+    unsafe {
+        if s.is_null() { return }
+        CString::from_raw(s)
+    };
 }
 
 

@@ -9,8 +9,9 @@ namespace csharp_expr_rs.Tests
         [Fact]
         public void Test1()
         {
-            var result = CsharpExprLib.GetExpression("test(1,2,3)");
-            result.Dispose();
+            var expression = new Expression("test(1,2,3)");
+            var result = expression.Execute();
+            expression.Dispose();
         }
     }
 }
