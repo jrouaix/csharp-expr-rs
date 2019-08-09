@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Jêrome Rx <jerome+git@rouaix.eu>"]
 edition = "2018"
 
+[lib]
+name="csharp_expr"
+crate-type = ["dylib"]
+
 [dependencies]
 nom="5.0.0"
 

@@ -6,6 +6,12 @@
 // #[global_allocator]
 // static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+#![feature(result_map_or_else)]
+
+//external crates
+use std::os::raw::c_char;
+use std::ffi::CString;
+
 use nom::{
   branch::alt,
   bytes::complete::{escaped, tag, take_while},
@@ -145,14 +151,7 @@ fn value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
   )(i)
 }
 
-/// the root element of a JSON parser is either an object or an array
-fn expr<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
-  delimited(
-    opt(sp),
-    value,
-    opt(sp),
-  )(i)
-}
+
 
 fn identifier<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
   context(
@@ -182,37 +181,23 @@ fn function_call<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (&'
   pair(identifier, parameters)(i)
 }
 
-// https://dev.to/living_syn/calling-rust-from-c-6hk
-
-fn main() {
-
-  let mut funcs : HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>  = HashMap::new();
-  
-  funcs.insert(
-    "test".to_string(),
-    Box::new(| _:&Vec<Expr> | Ok(&Expr::Boolean(true)))
-  );
-
-  funcs.insert(
-    "func2".to_string(),
-    Box::new(| v:&Vec<Expr> | v.first().ok_or("".to_string()))
-  );
-
-  let expr =  expr::<(&str, ErrorKind)>("test(func2(42), \"a\", func2(rr(5), true))")
-    .unwrap()
-    .1;
-  
-  // for _ in 0..10_000_00 {
-    let result = exec_expr(&expr, &funcs);
-    print!("{:?}", result);  
-  // }
-
+pub extern fn expr<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
+  delimited(
+    opt(sp),
+    value,
+    opt(sp),
+  )(i)
 }
 
-//https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
-//
+fn parse_expr<'a>(expression : &'a str) -> Result<Expr, String> {
+  let expr =  expr::<(&str, ErrorKind)>(expression);
+  match expr {
+    Ok(ok) => Ok(ok.1),
+    Err(_err_kind) => Err(String::from("error"))
+  }
+}
 
-fn exec_expr<'a>(expr : &'a Expr , funcs : &HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>) -> Result<&'a Expr, String>
+pub extern fn exec_expr<'a>(expr : &'a Expr , funcs : &HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>) -> Result<&'a Expr, String>
 {
   match expr {
     Expr::Str(_) => Ok(expr),
@@ -233,3 +218,89 @@ fn exec_expr<'a>(expr : &'a Expr , funcs : &HashMap<String,  Box<dyn Fn(&Vec<Exp
   }
 }
 
+pub extern fn parse_exec_expr<'a>(expression : &'a str, funcs : &HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>) -> String
+{
+  let expr = parse_expr(expression).unwrap();
+  let result = exec_expr(&expr, &funcs).unwrap();
+  
+  match result {
+    Expr::Str(s) => s.to_string(),
+    Expr::Boolean(b) => b.to_string(),
+    Expr::Num(n) => n.to_string(),
+    Expr::Array(_) =>  "Array".to_string(),
+    Expr::Object(_) => "Object".to_string(),
+    // Expr::BinaryOperator(_, _, _) => Ok(expr),
+    Expr::FunctionCall(_, _) =>  "FunctionCall".to_string(),
+  }
+}
+
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn execute_one_expression() {
+      let mut funcs : HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>  = HashMap::new();
+    
+      funcs.insert(
+        "true".to_string(),
+        Box::new(| _:&Vec<Expr> | Ok(&Expr::Boolean(true)))
+      );
+
+      funcs.insert(
+        "first".to_string(),
+        Box::new(| v:&Vec<Expr> | v.first().ok_or("There was no first value.".to_string()))
+      );
+      
+      let expression = "first(first(first(1,2,3),2,3),2,3)";
+
+      let expr = parse_expr(expression).unwrap();
+
+      for _ in 0..100_000_00 {
+        exec_expr(&expr, &funcs).unwrap();
+      }
+
+      println!("{:?}", parse_exec_expr(expression, &funcs));
+    }
+
+    
+}
+
+
+// https://dev.to/living_syn/calling-rust-from-c-6hk
+
+//https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
+//
+
+
+#[repr(C)]
+pub struct ExpressionFFIPointer { 
+    pub expression: *mut Expr,
+}
+
+#[no_mangle]
+pub extern fn ffi_parse_expr() -> ExpressionFFIPointer {
+  let expression = "test(1,2,3)";
+  let expr =  parse_expr(expression).unwrap();
+  
+  let b = Box::new(expr);
+  let ptr = Box::into_raw(b);
+
+  let ffi_struct = ExpressionFFIPointer {
+    expression: ptr,
+  };
+  return ffi_struct;
+}
+
+#[no_mangle]
+pub extern fn free_expr(ffi_struct: ExpressionFFIPointer) {
+  let b = unsafe { Box::from_raw(ffi_struct.expression) };
+}
+
+
+// #[no_mangle]
+// pub extern fn add_numbers(number1: i32, number2: i32) -> i32 {
+//     number1 + number2
+// }
