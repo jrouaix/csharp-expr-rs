@@ -10,7 +10,9 @@
 
 //external crates
 use std::os::raw::c_char;
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
+// use libc::{c_char, uint32_t};
+// use std::ffi::CStr;
 
 use nom::{
   branch::alt,
@@ -270,9 +272,9 @@ mod tests {
 
 
 // https://dev.to/living_syn/calling-rust-from-c-6hk
+// http://jakegoulding.com/rust-ffi-omnibus/
+// https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
 
-//https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
-//
 
 
 #[repr(C)]
@@ -281,9 +283,14 @@ pub struct ExpressionFFIPointer {
 }
 
 #[no_mangle]
-pub extern fn ffi_parse_expr() -> ExpressionFFIPointer {
-  let expression = "test(1,2,3)";
-  let expr =  parse_expr(expression).unwrap();
+pub extern fn ffi_parse_expr(expression: *const c_char) -> ExpressionFFIPointer {
+  let c_str = unsafe {
+    assert!(!expression.is_null());
+    CStr::from_ptr(expression)
+  };
+
+  let r_str = c_str.to_str().unwrap();
+  let expr =  parse_expr(r_str).unwrap();
   
   let b = Box::new(expr);
   let ptr = Box::into_raw(b);

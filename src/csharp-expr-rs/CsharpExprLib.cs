@@ -20,7 +20,7 @@ namespace csharp_expr_rs
         }
 
         [DllImport(LIB_NAME)]
-        static extern ExpressionFFIPointer ffi_parse_expr();
+        static extern ExpressionFFIPointer ffi_parse_expr(string expression);
         [DllImport(LIB_NAME)]
         static extern void free_expr(ExpressionFFIPointer ffi_struct);
 
@@ -44,9 +44,9 @@ namespace csharp_expr_rs
             }
         }
 
-        public static IExpression GetExpression()
+        public static IExpression GetExpression(string expression)
         {
-            var exprPtr = ffi_parse_expr();
+            var exprPtr = ffi_parse_expr(expression);
             return new Expression(exprPtr);
         }
     }

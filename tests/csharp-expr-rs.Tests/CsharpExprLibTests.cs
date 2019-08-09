@@ -9,7 +9,7 @@ namespace csharp_expr_rs.Tests
         [Fact]
         public void Test1()
         {
-            var result = CsharpExprLib.GetExpression();
+            var result = CsharpExprLib.GetExpression("test(1,2,3)");
             result.Dispose();
         }
     }
