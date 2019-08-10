@@ -71,6 +71,8 @@ pub enum Expr {
   // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
 }
 
+type FunctionImpl = dyn Fn(&Vec<Expr>) -> Result<&Expr, String>;
+type FunctionImplList = HashMap<String,  Box<FunctionImpl>>;
 
 
 /// A nom parser has the following signature:
@@ -200,7 +202,7 @@ fn parse_expr<'a>(expression : &'a str) -> Result<Expr, String> {
   }
 }
 
-pub extern fn exec_expr<'a>(expr : &'a Expr , funcs : &HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>) -> Result<&'a Expr, String>
+pub extern fn exec_expr<'a>(expr : &'a Expr , funcs : &FunctionImplList) -> Result<&'a Expr, String>
 {
   match expr {
     Expr::Str(_) => Ok(expr),
@@ -221,7 +223,7 @@ pub extern fn exec_expr<'a>(expr : &'a Expr , funcs : &HashMap<String,  Box<dyn 
   }
 }
 
-pub extern fn parse_exec_expr<'a>(expression : &'a str, funcs : &HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>) -> String
+pub extern fn parse_exec_expr<'a>(expression : &'a str, funcs : &FunctionImplList) -> String
 {
   let expr = parse_expr(expression).unwrap();
   let result = exec_expr(&expr, &funcs).unwrap();
@@ -249,7 +251,7 @@ mod tests {
 
     #[test]
     fn execute_one_expression() {
-      let mut funcs : HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>  = HashMap::new();
+      let mut funcs : FunctionImplList  = HashMap::new();
     
       funcs.insert(
         "true".to_string(),
@@ -303,7 +305,7 @@ pub extern fn ffi_exec_expr(ptr: *mut Expr) -> *mut c_char {
     &mut *ptr
   };
 
-  let mut funcs : HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>  = HashMap::new();
+  let mut funcs : FunctionImplList  = HashMap::new();
 
   funcs.insert(
     "true".to_string(),
