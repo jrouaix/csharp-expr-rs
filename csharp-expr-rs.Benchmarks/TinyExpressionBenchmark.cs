@@ -7,6 +7,7 @@ using System.Text;
 
 namespace csharp_expr_rs.Benchmarks
 {
+    [MemoryDiagnoser]
     public class TinyExpressionBenchmark
     {
         private Lambda _dynamicExpression;
@@ -15,14 +16,15 @@ namespace csharp_expr_rs.Benchmarks
         [GlobalSetup]
         public void GlobalSetup()
         {
+            var expression = "first(first(first(first(first(first(first(first(first(first(first(1,2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3)";
+
             // DynamicExpresso
             var interpreter = new Interpreter(InterpreterOptions.DefaultCaseInsensitive);
             interpreter.SetFunction("first", (Func<object, int, int, object>)((a, b, c) => new[] { a, b, c }.First()));
-
-            _dynamicExpression = interpreter.Parse("first(1,2,3)");
+            _dynamicExpression = interpreter.Parse(expression);
 
             //Rust
-            _rustExpression = new Expression("first(1,2,3)");
+            _rustExpression = new Expression(expression);
         }
 
         [GlobalCleanup]

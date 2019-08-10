@@ -202,7 +202,6 @@ fn parse_expr<'a>(expression: &'a str) -> Result<Expr, String> {
 
 fn prepare_expr(expr: Expr, funcs: &FunctionImplList) -> Expr {
     if let Expr::FunctionCall(name, parameters) = expr {
-        println!("{}", name);
         match &funcs.get(&name) {
             Some(fnc) => {
               let parameters = parameters.into_iter().map(|p| prepare_expr(p, &funcs)).collect();
