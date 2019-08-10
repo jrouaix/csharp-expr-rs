@@ -9,21 +9,13 @@ namespace csharp_expr_rs
         public const string LIB_NAME = "csharp_expr.dll";
 
         [DllImport(LIB_NAME)]
-        public static extern ExpressionFFIPointer ffi_parse_expr(string expression);
+        public static extern FFIExpressionHandle ffi_parse_expr(string expression);
         [DllImport(LIB_NAME)]
-        public static extern void ffi_free_expr(ExpressionFFIPointer ffi_struct);
+        public static extern void ffi_free_expr(IntPtr ptr);
         [DllImport(LIB_NAME)]
-        public static extern FFIStringHandle ffi_exec_expr(ExpressionFFIPointer ffi_struct);
+        public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr);
         [DllImport(LIB_NAME)]
-        public static extern void ffi_free_cstring(IntPtr s);
-
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct ExpressionFFIPointer
-        {
-            public IntPtr expression;
-        }
-   
+        public static extern void ffi_free_cstring(IntPtr ptr);
     }
 
 
@@ -45,6 +37,19 @@ namespace csharp_expr_rs
         protected override bool ReleaseHandle()
         {
             CsharpExprLib.ffi_free_cstring(handle);
+            return true;
+        }
+    }
+
+    internal class FFIExpressionHandle : SafeHandle
+    {
+        public FFIExpressionHandle() : base(IntPtr.Zero, true) { }
+
+        public override bool IsInvalid => false;
+
+        protected override bool ReleaseHandle()
+        {
+            CsharpExprLib.ffi_free_expr(handle);
             return true;
         }
     }

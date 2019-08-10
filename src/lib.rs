@@ -59,6 +59,7 @@ pub enum AssocOp {
     GreaterEqual,
 }
 
+#[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum Expr {
   Str(String),
@@ -280,14 +281,8 @@ mod tests {
 // https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
 
 
-
-#[repr(C)]
-pub struct ExpressionFFIPointer { 
-    pub expression: *mut Expr,
-}
-
 #[no_mangle]
-pub extern fn ffi_parse_expr(expression: *const c_char) -> ExpressionFFIPointer {
+pub extern fn ffi_parse_expr(expression: *const c_char) -> *mut Expr {
   let c_str = unsafe {
     assert!(!expression.is_null());
     CStr::from_ptr(expression)
@@ -297,54 +292,53 @@ pub extern fn ffi_parse_expr(expression: *const c_char) -> ExpressionFFIPointer 
   let expr =  parse_expr(r_str).unwrap();
   
   let b = Box::new(expr);
-  let ptr = Box::into_raw(b);
-
-  let ffi_struct = ExpressionFFIPointer {
-    expression: ptr,
-  };
-  return ffi_struct;
+  Box::into_raw(b)
 }
 
 #[no_mangle]
-pub extern fn ffi_exec_expr(ffi_struct: ExpressionFFIPointer) -> *mut c_char {
+pub extern fn ffi_exec_expr(ptr: *mut Expr) -> *mut c_char {
   
-  let expr = unsafe { Box::from_raw(ffi_struct.expression) };
+  let expr = unsafe {
+    assert!(!ptr.is_null());
+    &mut *ptr
+  };
 
   let mut funcs : HashMap<String,  Box<dyn Fn(&Vec<Expr>) -> Result<&Expr, String>>>  = HashMap::new();
 
-   CString::new("test").unwrap().into_raw()
-    
-  // funcs.insert(
-  //   "true".to_string(),
-  //   Box::new(| _:&Vec<Expr> | Ok(&Expr::Boolean(true)))
-  // );
+  funcs.insert(
+    "true".to_string(),
+    Box::new(| _:&Vec<Expr> | Ok(&Expr::Boolean(true)))
+  );
 
-  // funcs.insert(
-  //   "first".to_string(),
-  //   Box::new(| v:&Vec<Expr> | v.first().ok_or("There was no first value.".to_string()))
-  // );
+  funcs.insert(
+    "first".to_string(),
+    Box::new(| v:&Vec<Expr> | v.first().ok_or("There was no first value.".to_string()))
+  );
 
-  // let result = exec_expr(&expr, &funcs).unwrap();
-  // let s_result = expr_to_string(result);
-  
+  // println!("Haaaaaaaaaaaa");
+  // println!("{:?}", expr);
+  let result = exec_expr(&expr, &funcs).unwrap();
+  let s_result = expr_to_string(result);
+
+  // CString::new("test").unwrap().into_raw()
   // Box::into_raw(expr); // so the memory is not freed and the box is still living
-  // let c_str_result = CString::new(s_result).unwrap();
-  // c_str_result.into_raw()
+  
+  let c_str_result = CString::new(s_result).unwrap();
+  c_str_result.into_raw()
 }
 
 
 
 #[no_mangle]
-pub extern fn ffi_free_expr(ffi_struct: ExpressionFFIPointer) {
-  let b = unsafe { Box::from_raw(ffi_struct.expression) };
+pub extern fn ffi_free_expr(ptr: *mut Expr) {
+  if ptr.is_null() { return }
+  unsafe { Box::from_raw(ptr); }
 }
 
 #[no_mangle]
-pub extern fn ffi_free_cstring(s: *mut c_char) {
-    unsafe {
-        if s.is_null() { return }
-        CString::from_raw(s)
-    };
+pub extern fn ffi_free_cstring(ptr: *mut c_char) {
+  if ptr.is_null() { return }
+  unsafe { CString::from_raw(ptr) };
 }
 
 

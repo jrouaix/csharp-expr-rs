@@ -6,7 +6,7 @@ using DynamicExpresso;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace BeezUP2.Framework.Expressions.Tests
+namespace csharp_expr_rs.Tests
 {
     public class TinyPerfTest
     {

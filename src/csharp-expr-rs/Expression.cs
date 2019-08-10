@@ -15,29 +15,30 @@ namespace csharp_expr_rs
             : this(CsharpExprLib.ffi_parse_expr(expression))
         { }
 
-        private readonly CsharpExprLib.ExpressionFFIPointer _expressionFFIPointer;
-        internal Expression(CsharpExprLib.ExpressionFFIPointer expressionFFIPointer)
+        private readonly FFIExpressionHandle _expressionHandle;
+        internal Expression(FFIExpressionHandle expressionFFIPointer)
         {
-            _expressionFFIPointer = expressionFFIPointer;
+            _expressionHandle = expressionFFIPointer;
         }
 
         public string Execute()
         {
-            var stringHandle = CsharpExprLib.ffi_exec_expr(_expressionFFIPointer);
-
+            var stringHandle = CsharpExprLib.ffi_exec_expr(_expressionHandle);
+            string result;
             try
             {
-                return stringHandle.AsString();
+                result = stringHandle.AsString();
             }
             finally
             {
                 stringHandle.Dispose();
             }
+            return result;
         }
 
         public void Dispose()
         {
-            CsharpExprLib.ffi_free_expr(_expressionFFIPointer);
+            _expressionHandle.Dispose();
         }
     }
 }
