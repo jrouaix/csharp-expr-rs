@@ -7,7 +7,7 @@ using System.Text;
 
 namespace csharp_expr_rs.Benchmarks
 {
-    public class TinyExpressionBenchmark : IDisposable
+    public class TinyExpressionBenchmark
     {
         private Lambda _dynamicExpression;
         private Expression _rustExpression;
