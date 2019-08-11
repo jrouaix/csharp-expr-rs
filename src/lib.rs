@@ -23,11 +23,11 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while}, // escaped_transform
     character::complete::{alphanumeric0, alphanumeric1, char, one_of},
-    combinator::{cut, map, opt, map_opt},
+    combinator::{cut, map, map_opt, opt},
     error::{context, ErrorKind, ParseError},
     multi::separated_list,
     number::complete::double,
-    sequence::{delimited, pair, preceded, separated_pair, terminated},
+    sequence::{delimited, pair, preceded, terminated},
     IResult,
 };
 use std::collections::HashMap;
@@ -71,7 +71,6 @@ pub enum Expr {
     Boolean(bool),
     Num(f64),
     Array(Vec<Expr>),
-    Object(HashMap<String, Expr>),
     FunctionCall(String, Vec<Expr>),
     PreparedFunctionCall(String, Vec<Expr>, Rc<FunctionImpl>),
     // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
@@ -84,7 +83,6 @@ impl fmt::Debug for Expr {
             Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
             Expr::Num(x) => write!(f, "Num({:?})", x),
             Expr::Array(x) => write!(f, "Array({:?})", x),
-            Expr::Object(x) => write!(f, "Object({:?})", x),
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
             Expr::PreparedFunctionCall(s, x, _) => {
                 write!(f, "PreparedFunctionCall({:?},{:?})", s, x)
@@ -100,7 +98,6 @@ impl cmp::PartialEq for Expr {
             (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
-            (Expr::Object(x_a), Expr::Object(x_b)) => x_a == x_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => {
                 n_a == n_b && p_a == p_b
             }
@@ -127,22 +124,12 @@ fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E
 
 /// string interior combinator
 fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    escaped(alphanumeric1, '\\', one_of("\"n\\"))(input)
-
-    // escaped_transform(alphanumeric1, '\\', |i: &str| {
-    //     alt((
-    //         map(tag("\\\\"), |_| "\\"), 
-    //         map(tag("\\\""), |_| "\""),
-    //         ))(i)
-    // })(input)
+    escaped(alphanumeric1, '\\', one_of("\\\"rnt"))(input)
 }
 
 /// boolean combinator
 fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool, E> {
-    alt((
-        map(tag("false"), |_| false), 
-        map(tag("true"), |_| true)
-        ))(input)
+    alt((map(tag("false"), |_| false), map(tag("true"), |_| true)))(input)
 }
 
 /// full string combinator
@@ -167,33 +154,6 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Exp
     )(input)
 }
 
-/// key : value combinator
-fn key_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, Expr), E> {
-    separated_pair(preceded(sp, string), cut(preceded(sp, char(':'))), value)(input)
-}
-
-/// hash { key : value, ... } combinator
-fn hash<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, HashMap<String, Expr>, E> {
-    context(
-        "map",
-        preceded(
-            char('{'),
-            cut(terminated(
-                map(
-                    separated_list(preceded(sp, char(',')), key_value),
-                    |tuple_vec| {
-                        tuple_vec
-                            .into_iter()
-                            .map(|(k, v)| (String::from(k), v))
-                            .collect()
-                    },
-                ),
-                preceded(sp, char('}')),
-            )),
-        ),
-    )(input)
-}
-
 /// here, we apply the space parser before trying to parse a value
 fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     preceded(
@@ -207,7 +167,6 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
             map(function_call, |(f_name, params)| {
                 Expr::FunctionCall(String::from(f_name), params)
             }),
-            map(hash, Expr::Object),
             map(array, Expr::Array),
         )),
     )(input)
@@ -234,7 +193,9 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
     )(input)
 }
 
-fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
+fn function_call<'a, E: ParseError<&'a str>>(
+    input: &'a str,
+) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
     pair(identifier, parameters)(input)
 }
 
@@ -246,7 +207,7 @@ fn parse_expr<'a>(expression: &'a str) -> Result<Expr, String> {
     let expr = expr::<(&str, ErrorKind)>(expression);
     match expr {
         Ok(ok) => Ok(ok.1),
-        Err(_err_kind) => Err(String::from("error")),
+        Err(err_kind) => Err(format!("{:?}", err_kind)),
     }
 }
 
@@ -273,7 +234,6 @@ fn exec_expr<'a>(expr: &'a Expr) -> Result<&'a Expr, String> {
         Expr::Boolean(_) => Ok(expr),
         Expr::Num(_) => Ok(expr),
         Expr::Array(_) => Ok(expr),
-        Expr::Object(_) => Ok(expr),
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(name, _parameters) => {
             Err(format!("Unable to find the function named '{}'", name))
@@ -298,7 +258,6 @@ fn expr_to_string<'a>(expr: &'a Expr) -> String {
         Expr::Boolean(b) => b.to_string(),
         Expr::Num(n) => n.to_string(),
         Expr::Array(_) => "Array".to_string(),
-        Expr::Object(_) => "Object".to_string(),
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
         Expr::PreparedFunctionCall(_, _, _) => "PreparedFunctionCall".to_string(),
@@ -311,31 +270,40 @@ mod tests {
     use super::*;
     use test_case_derive::test_case;
 
-    #[test_case("true" => Expr::Boolean(true) :: "true")]
-    #[test_case("false" => Expr::Boolean(false) :: "false")]
+    #[test_case("true" => Expr::Boolean(true))]
+    #[test_case("false" => Expr::Boolean(false))]
     fn parse_boolean(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
     #[test_case(stringify!("test") => "test")]
-    #[test_case(stringify!("te\"st") => "te\"st")]
-    // #[test_case(stringify!("te(st") => "te(st" :: stringify!("te(st"))]
-    // #[test_case(stringify!("te\"st") => "test" :: stringify!("te\"st"))]
+    #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
+    #[test_case(stringify!("test\\slash") => "test\\slash")]
+    #[test_case(stringify!("test\newline") => "test\newline")]
+    #[test_case(stringify!("test\ttab") => "test\ttab")]
+    #[test_case(stringify!("test\rreturn") => "test\rreturn")]
     fn parse_str(expression: &str) -> String {
-        let expr = parse_expr(expression).unwrap();
+        let result = parse_expr(expression);
+        println!("{:?}", result);
+        let expr = result.unwrap();
         if let Expr::Str(result) = expr {
-            println!("{}", result);
-            result
+             result
         } else {
             panic!("{:?}", expr)
         }
     }
 
-    // #[test]
-    // fn parse_str() {
-    //     assert_eq!(parse_expr("\"test\"").unwrap(), Expr::Str("test".to_string()));
-    //     assert_eq!(parse_expr("\"te\\\"st\"").unwrap(), Expr::Str("te\"st".to_string()));
-    // }
+    #[test_case("1" => Expr::Num(1_f64))]
+    #[test_case("1.2" => Expr::Num(1.2_f64))]
+    #[test_case("-0.42" => Expr::Num(-0.42_f64))]
+    fn parse_num(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("[1,2]" => Expr::Array(vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
+    fn parse_array(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
 
     #[test]
     fn execute_one_expression() {
