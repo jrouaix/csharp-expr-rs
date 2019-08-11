@@ -358,10 +358,6 @@ mod tests {
     }
 }
 
-// https://dev.to/living_syn/calling-rust-from-c-6hk
-// http://jakegoulding.com/rust-ffi-omnibus/
-// https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
-
 #[no_mangle]
 pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut Expr {
     let c_str = unsafe {
