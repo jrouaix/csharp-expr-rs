@@ -10,6 +10,7 @@
 
 //external crates
 use std::ffi::{CStr, CString};
+use std::fmt;
 use std::os::raw::c_char;
 use std::rc::Rc;
 // use libc::{c_char, uint32_t};
@@ -18,13 +19,13 @@ use std::rc::Rc;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while},
-    character::complete::{alpha1, alphanumeric0, alphanumeric1, char, one_of},
+    character::complete::{alphanumeric0, alphanumeric1, char, one_of},
     combinator::{cut, map, opt},
-    error::{context, convert_error, ErrorKind, ParseError, VerboseError},
+    error::{context, ErrorKind, ParseError},
     multi::separated_list,
     number::complete::double,
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
-    Err, IResult,
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
+    IResult,
 };
 use std::collections::HashMap;
 use std::str;
@@ -69,7 +70,24 @@ pub enum Expr {
     Array(Vec<Expr>),
     Object(HashMap<String, Expr>),
     FunctionCall(String, Vec<Expr>),
-    PreparedFunctionCall(String, Vec<Expr>, Rc<FunctionImpl>), // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
+    PreparedFunctionCall(String, Vec<Expr>, Rc<FunctionImpl>),
+    // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
+}
+
+impl fmt::Debug for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expr::Str(x) => write!(f, "Str({:?})", x),
+            Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
+            Expr::Num(x) => write!(f, "Num({:?})", x),
+            Expr::Array(x) => write!(f, "Array({:?})", x),
+            Expr::Object(x) => write!(f, "Object({:?})", x),
+            Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
+            Expr::PreparedFunctionCall(s, x, _) => {
+                write!(f, "PreparedFunctionCall({:?},{:?})", s, x)
+            }
+        }
+    }
 }
 
 type FunctionImpl = dyn Fn(&Vec<Expr>) -> Result<&Expr, String>;
@@ -204,9 +222,12 @@ fn prepare_expr(expr: Expr, funcs: &FunctionImplList) -> Expr {
     if let Expr::FunctionCall(name, parameters) = expr {
         match &funcs.get(&name) {
             Some(fnc) => {
-              let parameters = parameters.into_iter().map(|p| prepare_expr(p, &funcs)).collect();
-              Expr::PreparedFunctionCall(name, parameters, Rc::clone(&fnc))
-            },
+                let parameters = parameters
+                    .into_iter()
+                    .map(|p| prepare_expr(p, &funcs))
+                    .collect();
+                Expr::PreparedFunctionCall(name, parameters, Rc::clone(&fnc))
+            }
             None => Expr::FunctionCall(name, parameters),
         }
     } else {
@@ -225,7 +246,7 @@ fn exec_expr<'a>(expr: &'a Expr) -> Result<&'a Expr, String> {
         Expr::FunctionCall(name, _parameters) => {
             Err(format!("Unable to find the function named '{}'", name))
         }
-        Expr::PreparedFunctionCall(name, parameters, fnc) => {
+        Expr::PreparedFunctionCall(_, parameters, fnc) => {
             let call_result = fnc(parameters)?;
             exec_expr(call_result)
         }
