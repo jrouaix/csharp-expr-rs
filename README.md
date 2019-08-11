@@ -14,7 +14,7 @@ c# expression parser in Rust
 - [x] Debug trait for Expr
 - [x] PartialEq trait for Expr
 - [x] Parse '"str\"ing"' as 'str"ing' value for Exp::Str (tried escaped_transfom but it changes the return types, perhaps find an other way, when creating the Expr::Str)
-- [ ] More unit tests (Rust side)
+- [x] More unit tests (Rust side)
 - [ ] Handle identifiers
 - [ ] Handle passing values arguments for identifiers from C# side
 - [ ] More perf benchmarks with arguments passing

@@ -14,6 +14,7 @@ use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::c_char;
 use std::rc::Rc;
+use std::vec::Vec;
 // use libc::{c_char, uint32_t};
 // use std::ffi::CStr;
 
@@ -287,7 +288,7 @@ mod tests {
         println!("{:?}", result);
         let expr = result.unwrap();
         if let Expr::Str(result) = expr {
-             result
+            result
         } else {
             panic!("{:?}", expr)
         }
@@ -305,9 +306,20 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
+    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
+    #[test_case(" test() " => Expr::FunctionCall("test".to_string(), Vec::<Expr>::new()))]    
+    fn parse_function_call(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("test([\"value\", 42],2)" => Expr::FunctionCall("test".to_string(), vec![Expr::Array(vec!(Expr::Str("value".to_string()), Expr::Num(42_f64))), Expr::Num(2_f64)]))]
+    fn parse_complexe_expressions(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
     #[test]
     fn execute_one_expression() {
-        let mut funcs: FunctionImplList = HashMap::new();
+        let mut funcs = FunctionImplList::new();
 
         funcs.insert(
             "first".to_string(),
@@ -385,8 +397,3 @@ pub extern "C" fn ffi_free_cstring(ptr: *mut c_char) {
     }
     unsafe { CString::from_raw(ptr) };
 }
-
-// #[no_mangle]
-// pub extern fn add_numbers(number1: i32, number2: i32) -> i32 {
-//     number1 + number2
-// }
