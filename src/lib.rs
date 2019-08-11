@@ -11,6 +11,7 @@
 //external crates
 use std::ffi::{CStr, CString};
 use std::fmt;
+use std::cmp;
 use std::os::raw::c_char;
 use std::rc::Rc;
 // use libc::{c_char, uint32_t};
@@ -86,6 +87,21 @@ impl fmt::Debug for Expr {
             Expr::PreparedFunctionCall(s, x, _) => {
                 write!(f, "PreparedFunctionCall({:?},{:?})", s, x)
             }
+        }
+    }
+}
+
+impl cmp::PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Expr::Str(x_a), Expr::Str(x_b)) => x_a == x_b,
+            (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
+            (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
+            (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
+            (Expr::Object(x_a), Expr::Object(x_b)) => x_a == x_b,
+            (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
+            (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => n_a == n_b && p_a == p_b,
+            _ => false
         }
     }
 }

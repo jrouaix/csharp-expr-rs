@@ -4,7 +4,7 @@ c# expression parser in Rust
 
 # Todo
 - [x] Debug trait for Expr
-- [ ] PartialEq trait for Expr
+- [x] PartialEq trait for Expr
 - [ ] More unit tests (Rust side)
 - [ ] Handle identifiers
 - [ ] Handle passing values arguments for identifiers from C# side
