@@ -161,7 +161,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Exp
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     context(
         "identifier",
-        preceded(opt(sp), recognize(tuple((opt(tag("_")), alphanumeric0)))),
+        preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric0))))),
     )(input)
 }
 
@@ -308,6 +308,8 @@ mod tests {
     }
 
     #[test_case("id" => Expr::Identifier("id".to_string()))]
+    #[test_case("@idarobase" => Expr::Identifier("idarobase".to_string()))]
+    #[test_case("id_id" => Expr::Identifier("id_id".to_string()))]
     #[test_case("id42" => Expr::Identifier("id42".to_string()))]
     #[test_case("_id0" => Expr::Identifier("_id0".to_string()))]
     #[test_case("_id1" => Expr::Identifier("_id1".to_string()))]
