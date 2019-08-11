@@ -9,19 +9,21 @@
 #![feature(result_map_or_else)]
 
 //external crates
+use std::cmp;
 use std::ffi::{CStr, CString};
 use std::fmt;
-use std::cmp;
 use std::os::raw::c_char;
 use std::rc::Rc;
 // use libc::{c_char, uint32_t};
 // use std::ffi::CStr;
 
+use unescape::unescape;
+
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, tag, take_while},
+    bytes::complete::{escaped, tag, take_while}, // escaped_transform
     character::complete::{alphanumeric0, alphanumeric1, char, one_of},
-    combinator::{cut, map, opt},
+    combinator::{cut, map, opt, map_opt},
     error::{context, ErrorKind, ParseError},
     multi::separated_list,
     number::complete::double,
@@ -99,9 +101,13 @@ impl cmp::PartialEq for Expr {
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Object(x_a), Expr::Object(x_b)) => x_a == x_b,
-            (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
-            (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => n_a == n_b && p_a == p_b,
-            _ => false
+            (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => {
+                n_a == n_b && p_a == p_b
+            }
+            (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => {
+                n_a == n_b && p_a == p_b
+            }
+            _ => false,
         }
     }
 }
@@ -114,31 +120,41 @@ type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 /// `type IResult<I, O, E = (I, ErrorKind)> = Result<(I, O), Err<E>>;`
 
 /// spaces combinator
-fn sp<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     let chars = " \t\r\n";
-    take_while(move |c| chars.contains(c))(i)
+    take_while(move |c| chars.contains(c))(input)
 }
 
 /// string interior combinator
-fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    escaped(alphanumeric1, '\\', one_of("\"n\\"))(i)
+fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    escaped(alphanumeric1, '\\', one_of("\"n\\"))(input)
+
+    // escaped_transform(alphanumeric1, '\\', |i: &str| {
+    //     alt((
+    //         map(tag("\\\\"), |_| "\\"), 
+    //         map(tag("\\\""), |_| "\""),
+    //         ))(i)
+    // })(input)
 }
 
 /// boolean combinator
 fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool, E> {
-    alt((map(tag("false"), |_| false), map(tag("true"), |_| true)))(input)
+    alt((
+        map(tag("false"), |_| false), 
+        map(tag("true"), |_| true)
+        ))(input)
 }
 
 /// full string combinator
-fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     context(
         "string",
         preceded(char('\"'), cut(terminated(parse_str, char('\"')))),
-    )(i)
+    )(input)
 }
 
 /// array combinator
-fn array<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
+fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
     context(
         "array",
         preceded(
@@ -148,16 +164,16 @@ fn array<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<Expr>, 
                 preceded(sp, char(']')),
             )),
         ),
-    )(i)
+    )(input)
 }
 
 /// key : value combinator
-fn key_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (&'a str, Expr), E> {
-    separated_pair(preceded(sp, string), cut(preceded(sp, char(':'))), value)(i)
+fn key_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, Expr), E> {
+    separated_pair(preceded(sp, string), cut(preceded(sp, char(':'))), value)(input)
 }
 
 /// hash { key : value, ... } combinator
-fn hash<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, HashMap<String, Expr>, E> {
+fn hash<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, HashMap<String, Expr>, E> {
     context(
         "map",
         preceded(
@@ -175,35 +191,42 @@ fn hash<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, HashMap<Stri
                 preceded(sp, char('}')),
             )),
         ),
-    )(i)
+    )(input)
 }
 
 /// here, we apply the space parser before trying to parse a value
-fn value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
+fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     preceded(
         sp,
         alt((
             map(double, Expr::Num),
             map(boolean, Expr::Boolean),
-            map(string, |s| Expr::Str(String::from(s))),
+            map_opt(string, |s| {
+                // Todo : replace by something more idiomatic : .some_or() ? something like that
+                if let Some(unescaped) = unescape(s) {
+                    Some(Expr::Str(String::from(unescaped)))
+                }else{
+                    None
+                }
+            }),
             map(function_call, |(f_name, params)| {
                 Expr::FunctionCall(String::from(f_name), params)
             }),
             map(hash, Expr::Object),
             map(array, Expr::Array),
         )),
-    )(i)
+    )(input)
 }
 
-fn identifier<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     context(
         "identifier",
         preceded(opt(sp), preceded(opt(tag("_")), alphanumeric0)),
-    )(i)
+    )(input)
 }
 
 /// parameters between parenthesis
-fn parameters<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
+fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
     context(
         "parameters",
         preceded(
@@ -213,17 +236,15 @@ fn parameters<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<Ex
                 preceded(sp, char(')')),
             )),
         ),
-    )(i)
+    )(input)
 }
 
-fn function_call<'a, E: ParseError<&'a str>>(
-    i: &'a str,
-) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
-    pair(identifier, parameters)(i)
+fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
+    pair(identifier, parameters)(input)
 }
 
-fn expr<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Expr, E> {
-    delimited(opt(sp), value, opt(sp))(i)
+fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    delimited(opt(sp), value, opt(sp))(input)
 }
 
 fn parse_expr<'a>(expression: &'a str) -> Result<Expr, String> {
@@ -293,15 +314,37 @@ fn expr_to_string<'a>(expr: &'a Expr) -> String {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use test_case_derive::test_case;
+
+    #[test_case("true" => Expr::Boolean(true) :: "true")]
+    #[test_case("false" => Expr::Boolean(false) :: "false")]
+    fn parse_boolean(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case(stringify!("test") => "test")]
+    #[test_case(stringify!("te\"st") => "te\"st")]
+    // #[test_case(stringify!("te(st") => "te(st" :: stringify!("te(st"))]
+    // #[test_case(stringify!("te\"st") => "test" :: stringify!("te\"st"))]
+    fn parse_str(expression: &str) -> String {
+        let expr = parse_expr(expression).unwrap();
+        if let Expr::Str(result) = expr {
+            println!("{}", result);
+            result
+        } else {
+            panic!("{:?}", expr)
+        }
+    }
+
+    // #[test]
+    // fn parse_str() {
+    //     assert_eq!(parse_expr("\"test\"").unwrap(), Expr::Str("test".to_string()));
+    //     assert_eq!(parse_expr("\"te\\\"st\"").unwrap(), Expr::Str("te\"st".to_string()));
+    // }
 
     #[test]
     fn execute_one_expression() {
         let mut funcs: FunctionImplList = HashMap::new();
-
-        funcs.insert(
-            "true".to_string(),
-            Rc::new(|_: &Vec<Expr>| Ok(&Expr::Boolean(true))),
-        );
 
         funcs.insert(
             "first".to_string(),
