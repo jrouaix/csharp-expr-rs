@@ -202,12 +202,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
             map(double, Expr::Num),
             map(boolean, Expr::Boolean),
             map_opt(string, |s| {
-                // Todo : replace by something more idiomatic : .some_or() ? something like that
-                if let Some(unescaped) = unescape(s) {
-                    Some(Expr::Str(String::from(unescaped)))
-                }else{
-                    None
-                }
+                unescape(s).map(|unescaped| Expr::Str(String::from(unescaped)))
             }),
             map(function_call, |(f_name, params)| {
                 Expr::FunctionCall(String::from(f_name), params)

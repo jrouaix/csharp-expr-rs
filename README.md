@@ -18,6 +18,8 @@ c# expression parser in Rust
 - [ ] Handle identifiers
 - [ ] Handle passing values arguments for identifiers from C# side
 - [ ] More perf benchmarks with arguments passing
+- [ ] Error handling on expressions parsing
+- [ ] Result/Error handling on FFI for expressions execution
 - [ ] Modularisation, so anyone can implement their own functions list
 - [ ] Implement existing functions in BZP system & compare performances
 - [ ] Handle Assoc/Binary operators
