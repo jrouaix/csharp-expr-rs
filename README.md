@@ -31,3 +31,6 @@ c# expression parser in Rust
 - https://dev.to/living_syn/calling-rust-from-c-6hk
 - http://jakegoulding.com/rust-ffi-omnibus/
 - https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
+
+# more reading ?
+- https://bodil.lol/parser-combinators/

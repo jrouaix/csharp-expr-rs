@@ -24,11 +24,11 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while}, // escaped_transform
     character::complete::{alphanumeric0, alphanumeric1, char, one_of},
-    combinator::{cut, map, map_opt, opt},
+    combinator::{cut, map, map_opt, opt, recognize},
     error::{context, ErrorKind, ParseError},
     multi::separated_list,
     number::complete::double,
-    sequence::{delimited, pair, preceded, terminated},
+    sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
 };
 use std::collections::HashMap;
@@ -72,6 +72,7 @@ pub enum Expr {
     Boolean(bool),
     Num(f64),
     Array(Vec<Expr>),
+    Identifier(String),
     FunctionCall(String, Vec<Expr>),
     PreparedFunctionCall(String, Vec<Expr>, Rc<FunctionImpl>),
     // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
@@ -84,6 +85,7 @@ impl fmt::Debug for Expr {
             Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
             Expr::Num(x) => write!(f, "Num({:?})", x),
             Expr::Array(x) => write!(f, "Array({:?})", x),
+            Expr::Identifier(x) =>  write!(f, "Identifier({:?})", x),
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
             Expr::PreparedFunctionCall(s, x, _) => {
                 write!(f, "PreparedFunctionCall({:?},{:?})", s, x)
@@ -99,6 +101,7 @@ impl cmp::PartialEq for Expr {
             (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
+            (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => {
                 n_a == n_b && p_a == p_b
             }
@@ -155,6 +158,33 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Exp
     )(input)
 }
 
+fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    context(
+        "identifier",
+        preceded(opt(sp), recognize(tuple((opt(tag("_")), alphanumeric0)))),
+    )(input)
+}
+
+/// parameters between parenthesis
+fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
+    context(
+        "parameters",
+        preceded(
+            char('('),
+            terminated(
+                separated_list(preceded(sp, char(',')), value),
+                preceded(sp, char(')')),
+            ),
+        ),
+    )(input)
+}
+
+fn function_call<'a, E: ParseError<&'a str>>(
+    input: &'a str,
+) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
+    pair(identifier, parameters)(input)
+}
+
 /// here, we apply the space parser before trying to parse a value
 fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     preceded(
@@ -169,35 +199,9 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
                 Expr::FunctionCall(String::from(f_name), params)
             }),
             map(array, Expr::Array),
+            map(identifier, |s| Expr::Identifier(s.to_string()))
         )),
     )(input)
-}
-
-fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context(
-        "identifier",
-        preceded(opt(sp), preceded(opt(tag("_")), alphanumeric0)),
-    )(input)
-}
-
-/// parameters between parenthesis
-fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
-    context(
-        "parameters",
-        preceded(
-            char('('),
-            cut(terminated(
-                separated_list(preceded(sp, char(',')), value),
-                preceded(sp, char(')')),
-            )),
-        ),
-    )(input)
-}
-
-fn function_call<'a, E: ParseError<&'a str>>(
-    input: &'a str,
-) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
-    pair(identifier, parameters)(input)
 }
 
 fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
@@ -235,6 +239,7 @@ fn exec_expr<'a>(expr: &'a Expr) -> Result<&'a Expr, String> {
         Expr::Boolean(_) => Ok(expr),
         Expr::Num(_) => Ok(expr),
         Expr::Array(_) => Ok(expr),
+        Expr::Identifier(_) => Ok(expr),
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(name, _parameters) => {
             Err(format!("Unable to find the function named '{}'", name))
@@ -259,6 +264,7 @@ fn expr_to_string<'a>(expr: &'a Expr) -> String {
         Expr::Boolean(b) => b.to_string(),
         Expr::Num(n) => n.to_string(),
         Expr::Array(_) => "Array".to_string(),
+        Expr::Identifier(i) => format!("[{}]", i),
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
         Expr::PreparedFunctionCall(_, _, _) => "PreparedFunctionCall".to_string(),
@@ -301,6 +307,15 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
+    #[test_case("id" => Expr::Identifier("id".to_string()))]
+    #[test_case("id42" => Expr::Identifier("id42".to_string()))]
+    #[test_case("_id0" => Expr::Identifier("_id0".to_string()))]
+    #[test_case("_id1" => Expr::Identifier("_id1".to_string()))]
+    fn parse_identifier(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+
     #[test_case("[1,2]" => Expr::Array(vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
     fn parse_array(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
@@ -308,6 +323,7 @@ mod tests {
 
     #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
     #[test_case(" test() " => Expr::FunctionCall("test".to_string(), Vec::<Expr>::new()))]    
+    #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Expr::Identifier("aa".to_string())]))]
     fn parse_function_call(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
@@ -316,6 +332,7 @@ mod tests {
     fn parse_complexe_expressions(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
+
 
     #[test]
     fn execute_one_expression() {
