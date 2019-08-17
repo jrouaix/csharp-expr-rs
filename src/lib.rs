@@ -6,7 +6,8 @@
 // #[global_allocator]
 // static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-#![feature(result_map_or_else)]
+// #![feature(result_map_or_else)]
+#![deny(bare_trait_objects)]
 
 //external crates
 use std::cmp;
@@ -24,7 +25,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while}, // escaped_transform
     character::complete::{alphanumeric0, alphanumeric1, char, one_of},
-    combinator::{cut, map, map_opt, opt, recognize},
+    combinator::{cut, map, map_opt, opt, recognize, not},
     error::{context, ErrorKind, ParseError},
     multi::separated_list,
     number::complete::double,
@@ -173,16 +174,19 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
             char('('),
             terminated(
                 separated_list(preceded(sp, char(',')), value),
-                preceded(sp, char(')')),
+                // map_opt(opt(separated_list(preceded(opt(sp), char(',')), value)), |opt| opt),
+                preceded(opt(sp), char(')')),
             ),
         ),
     )(input)
 }
 
-fn function_call<'a, E: ParseError<&'a str>>(
-    input: &'a str,
-) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
+fn function_call<'a, E: ParseError<&'a str>>( input: &'a str, ) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
     pair(identifier, parameters)(input)
+}
+
+fn identifier_only<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    map(pair(identifier, not(parameters)), |(a, b)| a)(input)
 }
 
 /// here, we apply the space parser before trying to parse a value
@@ -199,7 +203,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
                 Expr::FunctionCall(String::from(f_name), params)
             }),
             map(array, Expr::Array),
-            map(identifier, |s| Expr::Identifier(s.to_string()))
+            map(identifier_only, |s| Expr::Identifier(s.to_string()))
         )),
     )(input)
 }
@@ -277,6 +281,13 @@ mod tests {
     use super::*;
     use test_case_derive::test_case;
 
+    #[test]
+    fn parse_parameters(){
+        // let p = parameters::<ParseError<&str>>("");
+        // assert_eq!(p.unwrap(), ("",Vec::<Expr>::new()));
+        // println()
+    }
+
     #[test_case("true" => Expr::Boolean(true))]
     #[test_case("false" => Expr::Boolean(false))]
     fn parse_boolean(expression: &str) -> Expr {
@@ -324,7 +335,7 @@ mod tests {
     }
 
     #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
-    #[test_case(" test() " => Expr::FunctionCall("test".to_string(), Vec::<Expr>::new()))]    
+    #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<Expr>::new()))]    
     #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Expr::Identifier("aa".to_string())]))]
     fn parse_function_call(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
