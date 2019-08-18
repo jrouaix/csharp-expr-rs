@@ -25,7 +25,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while}, // escaped_transform
     character::complete::{alphanumeric0, alphanumeric1, char, one_of},
-    combinator::{cut, map, map_opt, opt, recognize, not},
+    combinator::{cut, map, map_opt, not, opt, recognize},
     error::{context, ErrorKind, ParseError},
     multi::separated_list,
     number::complete::double,
@@ -67,7 +67,7 @@ pub enum AssocOp {
 }
 
 #[repr(C)]
-// #[derive(Debug, PartialEq)]
+#[derive(Clone)]
 pub enum Expr {
     Str(String),
     Boolean(bool),
@@ -86,7 +86,7 @@ impl fmt::Debug for Expr {
             Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
             Expr::Num(x) => write!(f, "Num({:?})", x),
             Expr::Array(x) => write!(f, "Array({:?})", x),
-            Expr::Identifier(x) =>  write!(f, "Identifier({:?})", x),
+            Expr::Identifier(x) => write!(f, "Identifier({:?})", x),
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
             Expr::PreparedFunctionCall(s, x, _) => {
                 write!(f, "PreparedFunctionCall({:?},{:?})", s, x)
@@ -114,7 +114,7 @@ impl cmp::PartialEq for Expr {
     }
 }
 
-type FunctionImpl = dyn Fn(&Vec<Expr>) -> Result<&Expr, String>;
+type FunctionImpl = dyn Fn(&Vec<Expr>) -> Result<Expr, String>;
 type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 
 /// A nom parser has the following signature:
@@ -162,7 +162,13 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Exp
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     context(
         "identifier",
-        preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric0))))),
+        preceded(
+            opt(sp),
+            preceded(
+                opt(tag("@")),
+                recognize(tuple((opt(tag("_")), alphanumeric0))),
+            ),
+        ),
     )(input)
 }
 
@@ -181,12 +187,14 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
     )(input)
 }
 
-fn function_call<'a, E: ParseError<&'a str>>( input: &'a str, ) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
+fn function_call<'a, E: ParseError<&'a str>>(
+    input: &'a str,
+) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
     pair(identifier, parameters)(input)
 }
 
 fn identifier_only<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    map(pair(identifier, not(parameters)), |(a, b)| a)(input)
+    map(pair(identifier, not(parameters)), |(a, _b)| a)(input)
 }
 
 /// here, we apply the space parser before trying to parse a value
@@ -203,7 +211,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
                 Expr::FunctionCall(String::from(f_name), params)
             }),
             map(array, Expr::Array),
-            map(identifier_only, |s| Expr::Identifier(s.to_string()))
+            map(identifier_only, |s| Expr::Identifier(s.to_string())),
         )),
     )(input)
 }
@@ -237,29 +245,28 @@ fn prepare_expr(expr: Expr, funcs: &FunctionImplList) -> Expr {
     }
 }
 
-fn exec_expr<'a>(expr: &'a Expr) -> Result<&'a Expr, String> {
+fn exec_expr<'a>(expr: &'a Expr, values: &HashMap<String, String>) -> Result<Expr, String> {
     match expr {
-        Expr::Str(_) => Ok(expr),
-        Expr::Boolean(_) => Ok(expr),
-        Expr::Num(_) => Ok(expr),
-        Expr::Array(_) => Ok(expr),
-        Expr::Identifier(_) => Ok(expr),
+        Expr::Str(_) => Ok(expr.clone()),
+        Expr::Boolean(_) => Ok(expr.clone()),
+        Expr::Num(_) => Ok(expr.clone()),
+        Expr::Array(_) => Ok(expr.clone()),
+        Expr::Identifier(name) => match &values.get(name) {
+            Some(s) => Ok(Expr::Str(s.to_string())),
+            None => Err(format!(
+                "Unable to find value for identifier named '{}'",
+                name
+            )),
+        },
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(name, _parameters) => {
             Err(format!("Unable to find the function named '{}'", name))
         }
         Expr::PreparedFunctionCall(_, parameters, fnc) => {
             let call_result = fnc(parameters)?;
-            exec_expr(call_result)
+            exec_expr(&call_result, values)
         }
     }
-}
-
-fn parse_exec_expr<'a>(expression: &'a str, funcs: &FunctionImplList) -> String {
-    let expr = parse_expr(expression).unwrap();
-    let expr = prepare_expr(expr, &funcs);
-    let result = exec_expr(&expr).unwrap();
-    expr_to_string(result)
 }
 
 fn expr_to_string<'a>(expr: &'a Expr) -> String {
@@ -282,7 +289,7 @@ mod tests {
     use test_case_derive::test_case;
 
     #[test]
-    fn parse_parameters(){
+    fn parse_parameters() {
         // let p = parameters::<ParseError<&str>>("");
         // assert_eq!(p.unwrap(), ("",Vec::<Expr>::new()));
         // println()
@@ -328,14 +335,13 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-
     #[test_case("[1,2]" => Expr::Array(vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
     fn parse_array(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
     #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
-    #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<Expr>::new()))]    
+    #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<Expr>::new()))]
     #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Expr::Identifier("aa".to_string())]))]
     fn parse_function_call(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
@@ -346,20 +352,46 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-
     #[test]
     fn execute_one_expression() {
         let mut funcs = FunctionImplList::new();
-
         funcs.insert(
             "first".to_string(),
-            Rc::new(|v: &Vec<Expr>| v.first().ok_or("There was no first value.".to_string())),
+            Rc::new(|v: &Vec<Expr>| {
+                v.first().map_or_else(
+                    || Err("There was no first value.".to_string()),
+                    |x| Ok(x.clone()),
+                )
+            }),
         );
 
-        let expression = "first(first(first(1,2,3),2,3),2,3)";
-        let result = parse_exec_expr(expression, &funcs);
-        assert_eq!(result, "1");
+        funcs.insert(
+            "forty_two".to_string(),
+            Rc::new(|_v: &Vec<Expr>| Ok(Expr::Num(42_f64))),
+        );
+        funcs.insert(
+            "forty_two_str".to_string(),
+            Rc::new(|_v: &Vec<Expr>| Ok(Expr::Str("42".to_string()))),
+        );
+
+        let mut values = HashMap::<String, String>::new();
+        values.insert("my".into(), "value".to_string());
+
+        let expression = "first(first(first(my,2,3),2,3),2,3)";
+        let result = parse_exec_expr(expression, &funcs, &values);
+        assert_eq!(result, "value");
         println!("{:?}", result);
+    }
+
+    fn parse_exec_expr<'a>(
+        expression: &'a str,
+        funcs: &FunctionImplList,
+        values: &HashMap<String, String>,
+    ) -> String {
+        let expr = parse_expr(expression).unwrap();
+        let expr = prepare_expr(expr, funcs);
+        let result = exec_expr(&expr, values).unwrap();
+        expr_to_string(&result)
     }
 }
 
@@ -377,12 +409,17 @@ pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut Expr {
 
     funcs.insert(
         "true".to_string(),
-        Rc::new(|_: &Vec<Expr>| Ok(&Expr::Boolean(true))),
+        Rc::new(|_: &Vec<Expr>| Ok(Expr::Boolean(true))),
     );
 
     funcs.insert(
         "first".to_string(),
-        Rc::new(|v: &Vec<Expr>| v.first().ok_or("There was no first value.".to_string())),
+        Rc::new(|v: &Vec<Expr>| {
+            v.first().map_or_else(
+                || Err("There was no first value.".to_string()),
+                |x| Ok(x.clone()),
+            )
+        }),
     );
 
     let expr = prepare_expr(expr, &funcs);
@@ -398,13 +435,10 @@ pub extern "C" fn ffi_exec_expr(ptr: *mut Expr) -> *mut c_char {
         &mut *ptr
     };
 
-    // println!("Haaaaaaaaaaaa");
-    // println!("{:?}", expr);
-    let result = exec_expr(&expr).unwrap();
-    let s_result = expr_to_string(result);
+    let values = HashMap::<String, String>::new();
 
-    // CString::new("test").unwrap().into_raw()
-    // Box::into_raw(expr); // so the memory is not freed and the box is still living
+    let result = exec_expr(&expr, &values).unwrap();
+    let s_result = expr_to_string(&result);
 
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()
