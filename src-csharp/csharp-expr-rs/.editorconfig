@@ -1,0 +1,10 @@
+﻿[*.cs]
+
+# S101: Types should be named in PascalCase
+dotnet_diagnostic.S101.severity = silent
+
+# S3881: "IDisposable" should be implemented correctly
+dotnet_diagnostic.S3881.severity = suggestion
+
+# IDE1006: Naming Styles
+dotnet_diagnostic.IDE1006.severity = silent

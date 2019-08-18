@@ -4,7 +4,7 @@ using System.Text;
 
 namespace csharp_expr_rs
 {
-    internal static class CsharpExprLib
+    internal static class Native
     {
         public const string LIB_NAME = "csharp_expr.dll";
 
@@ -17,6 +17,13 @@ namespace csharp_expr_rs
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_cstring(IntPtr ptr);
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct FFIIdentifierKeyValue
+    {
+        public string key;
+        public uint value;
+    };
 
 
     internal class FFIStringHandle : SafeHandle
@@ -36,7 +43,7 @@ namespace csharp_expr_rs
 
         protected override bool ReleaseHandle()
         {
-            CsharpExprLib.ffi_free_cstring(handle);
+            Native.ffi_free_cstring(handle);
             return true;
         }
     }
@@ -49,7 +56,7 @@ namespace csharp_expr_rs
 
         protected override bool ReleaseHandle()
         {
-            CsharpExprLib.ffi_free_expr(handle);
+            Native.ffi_free_expr(handle);
             return true;
         }
     }

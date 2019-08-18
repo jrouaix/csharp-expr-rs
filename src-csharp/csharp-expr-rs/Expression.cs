@@ -12,7 +12,7 @@ namespace csharp_expr_rs
     public class Expression : IExpression
     {
         public Expression(string expression)
-            : this(CsharpExprLib.ffi_parse_expr(expression))
+            : this(Native.ffi_parse_expr(expression))
         { }
 
         private readonly FFIExpressionHandle _expressionHandle;
@@ -23,7 +23,7 @@ namespace csharp_expr_rs
 
         public string Execute()
         {
-            var stringHandle = CsharpExprLib.ffi_exec_expr(_expressionHandle);
+            var stringHandle = Native.ffi_exec_expr(_expressionHandle);
             string result;
             try
             {
