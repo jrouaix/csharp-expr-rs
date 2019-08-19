@@ -37,6 +37,6 @@ namespace csharp_expr_rs.Benchmarks
         public object DynamicExpresso() => _dynamicExpression.Invoke();
 
         [Benchmark]
-        public object Rust() => _rustExpression.Execute();
+        public object Rust() => _rustExpression.Execute(new Dictionary<string, string>());
     }
 }

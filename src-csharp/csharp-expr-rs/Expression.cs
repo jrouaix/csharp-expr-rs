@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace csharp_expr_rs
 {
     public interface IExpression : IDisposable
     {
-        string Execute();
+        string Execute(Dictionary<string, string> identifierValues);
     }
 
     public class Expression : IExpression
@@ -21,9 +22,11 @@ namespace csharp_expr_rs
             _expressionHandle = expressionFFIPointer;
         }
 
-        public string Execute()
+        public string Execute(Dictionary<string, string> identifierValues)
         {
-            var stringHandle = Native.ffi_exec_expr(_expressionHandle);
+            var idValues = identifierValues.Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value }).ToArray();
+
+            var stringHandle = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
             string result;
             try
             {

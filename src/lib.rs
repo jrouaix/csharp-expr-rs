@@ -15,6 +15,7 @@ use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::c_char;
 use std::rc::Rc;
+use std::slice;
 use std::vec::Vec;
 // use libc::{c_char, uint32_t};
 // use std::ffi::CStr;
@@ -269,13 +270,17 @@ fn exec_expr<'a>(expr: &'a Expr, values: &HashMap<String, String>) -> Result<Exp
     }
 }
 
-fn expr_to_string<'a>(expr: &'a Expr) -> String {
+fn expr_to_string<'a>(expr: &'a Expr, values: &HashMap<String, String>) -> String {
     match expr {
         Expr::Str(s) => s.to_string(),
         Expr::Boolean(b) => b.to_string(),
         Expr::Num(n) => n.to_string(),
         Expr::Array(_) => "Array".to_string(),
         Expr::Identifier(i) => format!("[{}]", i),
+        // Expr::Identifier(name) => match &values.get(name) {
+        //     Some(s) => s.to_string(),
+        //     None => format!("Unable to find value for identifier named '{}'", name),
+        // },
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
         Expr::PreparedFunctionCall(_, _, _) => "PreparedFunctionCall".to_string(),
@@ -428,17 +433,59 @@ pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut Expr {
     Box::into_raw(b)
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct IdentifierKeyValue {
+    key: *const c_char,
+    value: *const c_char,
+}
+
 #[no_mangle]
-pub extern "C" fn ffi_exec_expr(ptr: *mut Expr) -> *mut c_char {
+pub extern "C" fn ffi_exec_expr(
+    ptr: *mut Expr,
+    identifier_values: *const IdentifierKeyValue,
+    identifier_values_len: usize,
+) -> *mut c_char {
     let expr = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
 
-    let values = HashMap::<String, String>::new();
+    let vals = unsafe {
+        assert!(!identifier_values.is_null());
+        slice::from_raw_parts(identifier_values, identifier_values_len)
+    };
+
+    // let values = HashMap::<String, String>::new();
+    // for ikv in vals
+
+    let values: HashMap<_, _> = vals
+        .into_iter()
+        .map(|ikv| {
+            let k = unsafe {
+                assert!(!ikv.key.is_null());
+                CStr::from_ptr(ikv.key)
+            }
+            .to_str()
+            .unwrap()
+            .to_string();
+
+            let v = unsafe {
+                assert!(!ikv.value.is_null());
+                CStr::from_ptr(ikv.value)
+            }
+            .to_str()
+            .unwrap()
+            .to_string();
+
+            (k, v)
+        })
+        .collect();
+    // .filter(|&v| v % 2 == 0)
+    // .fold(0, |acc, v| acc + v);
 
     let result = exec_expr(&expr, &values).unwrap();
-    let s_result = expr_to_string(&result);
+    let s_result = expr_to_string(&result, &values);
 
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()

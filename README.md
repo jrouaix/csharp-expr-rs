@@ -17,7 +17,8 @@ c# expression parser in Rust
 - [x] More unit tests (Rust side)
 - [x] Handle identifiers
 - [x] Handle identifier value and usage
-- [ ] Handle passing values arguments for identifiers from C# side
+- [x] Handle passing values arguments for identifiers from C# side
+- [ ] Benchmarks & Optimisations 
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Error handling on expressions parsing
@@ -30,8 +31,8 @@ c# expression parser in Rust
 
 
 # Super helpfull resources
-- https://dev.to/living_syn/calling-rust-from-c-6hk
 - http://jakegoulding.com/rust-ffi-omnibus/
+- https://dev.to/living_syn/calling-rust-from-c-6hk
 - https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
 
 # more reading ?

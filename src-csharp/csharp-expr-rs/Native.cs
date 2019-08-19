@@ -13,7 +13,7 @@ namespace csharp_expr_rs
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_expr(IntPtr ptr);
         [DllImport(LIB_NAME)]
-        public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr);
+        public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_cstring(IntPtr ptr);
     }
@@ -22,9 +22,8 @@ namespace csharp_expr_rs
     internal struct FFIIdentifierKeyValue
     {
         public string key;
-        public uint value;
+        public string value;
     };
-
 
     internal class FFIStringHandle : SafeHandle
     {
