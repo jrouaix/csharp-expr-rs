@@ -73,10 +73,10 @@ pub enum Expr {
     Str(String),
     Boolean(bool),
     Num(f64),
-    Array(Vec<Expr>),
+    Array(Vec<Rc<Expr>>),
     Identifier(String),
-    FunctionCall(String, Vec<Expr>),
-    PreparedFunctionCall(String, Vec<Expr>, Rc<FunctionImpl>),
+    FunctionCall(String, Vec<Rc<Expr>>),
+    PreparedFunctionCall(String, Vec<Rc<Expr>>, Rc<FunctionImpl>),
     // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
 }
 
@@ -115,21 +115,7 @@ impl cmp::PartialEq for Expr {
     }
 }
 
-enum RefOrValue<'a> {
-    Ref(&'a Expr),
-    Value(Expr),
-}
-
-impl RefOrValue<'_> {
-    fn get_ref(&self) -> &Expr {
-        match self {
-            RefOrValue::Ref(x) => x,
-            RefOrValue::Value(x) => &x,
-        }
-    }
-}
-
-type FunctionImpl = dyn Fn(&Vec<Expr>) -> Result<Expr, String>;
+type FunctionImpl = dyn Fn(&Vec<Rc<Expr>>) -> Result<Rc<Expr>, String>;
 type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 
 /// A nom parser has the following signature:
@@ -161,13 +147,15 @@ fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a st
 }
 
 /// array combinator
-fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
+fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Rc<Expr>>, E> {
     context(
         "array",
         preceded(
             char('['),
             cut(terminated(
-                separated_list(preceded(sp, char(',')), value),
+                map(separated_list(preceded(sp, char(',')), value), |v| {
+                    v.into_iter().map(|x| Rc::new(x)).collect()
+                }),
                 preceded(sp, char(']')),
             )),
         ),
@@ -188,13 +176,15 @@ fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'
 }
 
 /// parameters between parenthesis
-fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Expr>, E> {
+fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Rc<Expr>>, E> {
     context(
         "parameters",
         preceded(
             char('('),
             terminated(
-                separated_list(preceded(sp, char(',')), value),
+                map(separated_list(preceded(sp, char(',')), value), |v| {
+                    v.into_iter().map(|x| Rc::new(x)).collect()
+                }),
                 // map_opt(opt(separated_list(preceded(opt(sp), char(',')), value)), |opt| opt),
                 preceded(opt(sp), char(')')),
             ),
@@ -204,7 +194,7 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
 
 fn function_call<'a, E: ParseError<&'a str>>(
     input: &'a str,
-) -> IResult<&'a str, (&'a str, Vec<Expr>), E> {
+) -> IResult<&'a str, (&'a str, Vec<Rc<Expr>>), E> {
     pair(identifier, parameters)(input)
 }
 
@@ -243,34 +233,35 @@ fn parse_expr<'a>(expression: &'a str) -> Result<Expr, String> {
     }
 }
 
-fn prepare_expr(expr: Expr, funcs: &FunctionImplList) -> Expr {
-    if let Expr::FunctionCall(name, parameters) = expr {
-        match &funcs.get(&name) {
+fn prepare_expr(expr: Rc<Expr>, funcs: &FunctionImplList) -> Rc<Expr> {
+    if let Expr::FunctionCall(name, parameters) = expr.as_ref() {
+        match &funcs.get(name) {
             Some(fnc) => {
                 let parameters = parameters
                     .into_iter()
-                    .map(|p| prepare_expr(p, &funcs))
+                    .map(|p| prepare_expr(p.clone(), &funcs))
                     .collect();
-                Expr::PreparedFunctionCall(name, parameters, Rc::clone(&fnc))
+                Rc::new(Expr::PreparedFunctionCall(
+                    name.clone(),
+                    parameters,
+                    Rc::clone(&fnc),
+                ))
             }
-            None => Expr::FunctionCall(name, parameters),
+            None => expr,
         }
     } else {
         expr
     }
 }
 
-fn exec_expr<'a>(
-    ref_or_value: RefOrValue<'a>,
-    values: &HashMap<String, String>,
-) -> Result<RefOrValue<'a>, String> {
-    match ref_or_value.get_ref() {
-        Expr::Str(_) => Ok(ref_or_value),
-        Expr::Boolean(_) => Ok(ref_or_value),
-        Expr::Num(_) => Ok(ref_or_value),
-        Expr::Array(_) => Ok(ref_or_value),
+fn exec_expr<'a>(expr: &'a Rc<Expr>, values: &HashMap<String, String>) -> Result<Rc<Expr>, String> {
+    match expr.as_ref() {
+        Expr::Str(_) => Ok(expr.clone()),
+        Expr::Boolean(_) => Ok(expr.clone()),
+        Expr::Num(_) => Ok(expr.clone()),
+        Expr::Array(_) => Ok(expr.clone()),
         Expr::Identifier(name) => match &values.get(name) {
-            Some(s) => Ok(RefOrValue::Value(Expr::Str(s.to_string()))),
+            Some(s) => Ok(Rc::new(Expr::Str(s.to_string()))),
             None => Err(format!(
                 "Unable to find value for identifier named '{}'",
                 name
@@ -281,8 +272,8 @@ fn exec_expr<'a>(
             Err(format!("Unable to find the function named '{}'", name))
         }
         Expr::PreparedFunctionCall(_, parameters, fnc) => {
-            let call_result = fnc(parameters)?;
-            exec_expr(RefOrValue::Value(call_result), values)
+            let call_result = fnc(&parameters)?;
+            exec_expr(&call_result, values)
         }
     }
 }
@@ -357,19 +348,19 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("[1,2]" => Expr::Array(vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
+    #[test_case("[1,2]" => Expr::Array(vec![Rc::new(Expr::Num(1_f64)), Rc::new(Expr::Num(2_f64))]))]
     fn parse_array(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![Expr::Num(1_f64), Expr::Num(2_f64)]))]
-    #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<Expr>::new()))]
-    #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Expr::Identifier("aa".to_string())]))]
+    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Num(1_f64)), Rc::new(Expr::Num(2_f64))]))]
+    #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<Rc<Expr>>::new()))]
+    #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
     fn parse_function_call(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test([\"value\", 42],2)" => Expr::FunctionCall("test".to_string(), vec![Expr::Array(vec!(Expr::Str("value".to_string()), Expr::Num(42_f64))), Expr::Num(2_f64)]))]
+    #[test_case("test([\"value\", 42],2)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![Rc::new(Expr::Str("value".to_string())), Rc::new(Expr::Num(42_f64))])), Rc::new(Expr::Num(2_f64))]))]
     fn parse_complexe_expressions(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
@@ -379,7 +370,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             "first".to_string(),
-            Rc::new(|v: &Vec<Expr>| {
+            Rc::new(|v: &Vec<Rc<Expr>>| {
                 v.first().map_or_else(
                     || Err("There was no first value.".to_string()),
                     |x| Ok(x.clone()),
@@ -389,11 +380,11 @@ mod tests {
 
         funcs.insert(
             "forty_two".to_string(),
-            Rc::new(|_v: &Vec<Expr>| Ok(Expr::Num(42_f64))),
+            Rc::new(|_v: &Vec<Rc<Expr>>| Ok(Rc::new(Expr::Num(42_f64)))),
         );
         funcs.insert(
             "forty_two_str".to_string(),
-            Rc::new(|_v: &Vec<Expr>| Ok(Expr::Str("42".to_string()))),
+            Rc::new(|_v: &Vec<Rc<Expr>>| Ok(Rc::new(Expr::Str("42".to_string())))),
         );
 
         let mut values = HashMap::<String, String>::new();
@@ -411,14 +402,14 @@ mod tests {
         values: &HashMap<String, String>,
     ) -> String {
         let expr = parse_expr(expression).unwrap();
-        let expr = prepare_expr(expr, funcs);
-        let result = exec_expr(RefOrValue::Value(expr), values).unwrap();
-        expr_to_string(&result.get_ref(), values)
+        let expr = prepare_expr(Rc::new(expr), funcs);
+        let result = exec_expr(&expr, values).unwrap();
+        expr_to_string(&result, values)
     }
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut Expr {
+pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut Rc<Expr> {
     let c_str = unsafe {
         assert!(!expression.is_null());
         CStr::from_ptr(expression)
@@ -431,12 +422,12 @@ pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut Expr {
 
     funcs.insert(
         "true".to_string(),
-        Rc::new(|_: &Vec<Expr>| Ok(Expr::Boolean(true))),
+        Rc::new(|_: &Vec<Rc<Expr>>| Ok(Rc::new(Expr::Boolean(true)))),
     );
 
     funcs.insert(
         "first".to_string(),
-        Rc::new(|v: &Vec<Expr>| {
+        Rc::new(|v: &Vec<Rc<Expr>>| {
             v.first().map_or_else(
                 || Err("There was no first value.".to_string()),
                 |x| Ok(x.clone()),
@@ -444,7 +435,7 @@ pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut Expr {
         }),
     );
 
-    let expr = prepare_expr(expr, &funcs);
+    let expr = prepare_expr(Rc::new(expr), &funcs);
 
     let b = Box::new(expr);
     Box::into_raw(b)
@@ -459,7 +450,7 @@ pub struct IdentifierKeyValue {
 
 #[no_mangle]
 pub extern "C" fn ffi_exec_expr(
-    ptr: *mut Expr,
+    ptr: *mut Rc<Expr>,
     identifier_values: *const IdentifierKeyValue,
     identifier_values_len: usize,
 ) -> *mut c_char {
@@ -498,15 +489,15 @@ pub extern "C" fn ffi_exec_expr(
 
     // let values = HashMap::<String, String>::new();
 
-    let result = exec_expr(RefOrValue::Ref(expr), &values).unwrap();
-    let s_result = expr_to_string(&result.get_ref(), &values);
+    let result = exec_expr(expr, &values).unwrap();
+    let s_result = expr_to_string(&result, &values);
 
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_free_expr(ptr: *mut Expr) {
+pub extern "C" fn ffi_free_expr(ptr: *mut Rc<Expr>) {
     if ptr.is_null() {
         return;
     }
