@@ -8,6 +8,7 @@ using System.Text;
 namespace csharp_expr_rs.Benchmarks
 {
     [MemoryDiagnoser]
+    //[NativeMemoryDiagnoser] // Use it when available : https://github.com/dotnet/BenchmarkDotNet/pull/1131 / https://github.com/dotnet/BenchmarkDotNet/releases -> 0.11.6
     public class TinyExpressionBenchmark
     {
         private Lambda _dynamicExpression;

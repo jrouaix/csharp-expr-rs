@@ -18,7 +18,7 @@ c# expression parser in Rust
 - [x] Handle identifiers
 - [x] Handle identifier value and usage
 - [x] Handle passing values arguments for identifiers from C# side
-- [ ] Benchmarks & Optimisations 
+- [ ] Benchmarks & Optimisations => cloning Expressions was a baaaaaad idea ! /10 perfs drop
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Error handling on expressions parsing

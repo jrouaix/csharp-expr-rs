@@ -115,6 +115,20 @@ impl cmp::PartialEq for Expr {
     }
 }
 
+enum RefOrValue<'a> {
+    Ref(&'a Expr),
+    Value(Expr),
+}
+
+impl RefOrValue<'_> {
+    fn get_ref(&self) -> &Expr {
+        match self {
+            RefOrValue::Ref(x) => x,
+            RefOrValue::Value(x) => &x,
+        }
+    }
+}
+
 type FunctionImpl = dyn Fn(&Vec<Expr>) -> Result<Expr, String>;
 type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 
@@ -246,14 +260,17 @@ fn prepare_expr(expr: Expr, funcs: &FunctionImplList) -> Expr {
     }
 }
 
-fn exec_expr<'a>(expr: &'a Expr, values: &HashMap<String, String>) -> Result<Expr, String> {
-    match expr {
-        Expr::Str(_) => Ok(expr.clone()),
-        Expr::Boolean(_) => Ok(expr.clone()),
-        Expr::Num(_) => Ok(expr.clone()),
-        Expr::Array(_) => Ok(expr.clone()),
+fn exec_expr<'a>(
+    ref_or_value: RefOrValue<'a>,
+    values: &HashMap<String, String>,
+) -> Result<RefOrValue<'a>, String> {
+    match ref_or_value.get_ref() {
+        Expr::Str(_) => Ok(ref_or_value),
+        Expr::Boolean(_) => Ok(ref_or_value),
+        Expr::Num(_) => Ok(ref_or_value),
+        Expr::Array(_) => Ok(ref_or_value),
         Expr::Identifier(name) => match &values.get(name) {
-            Some(s) => Ok(Expr::Str(s.to_string())),
+            Some(s) => Ok(RefOrValue::Value(Expr::Str(s.to_string()))),
             None => Err(format!(
                 "Unable to find value for identifier named '{}'",
                 name
@@ -265,7 +282,7 @@ fn exec_expr<'a>(expr: &'a Expr, values: &HashMap<String, String>) -> Result<Exp
         }
         Expr::PreparedFunctionCall(_, parameters, fnc) => {
             let call_result = fnc(parameters)?;
-            exec_expr(&call_result, values)
+            exec_expr(RefOrValue::Value(call_result), values)
         }
     }
 }
@@ -395,8 +412,8 @@ mod tests {
     ) -> String {
         let expr = parse_expr(expression).unwrap();
         let expr = prepare_expr(expr, funcs);
-        let result = exec_expr(&expr, values).unwrap();
-        expr_to_string(&result)
+        let result = exec_expr(RefOrValue::Value(expr), values).unwrap();
+        expr_to_string(&result.get_ref(), values)
     }
 }
 
@@ -456,9 +473,6 @@ pub extern "C" fn ffi_exec_expr(
         slice::from_raw_parts(identifier_values, identifier_values_len)
     };
 
-    // let values = HashMap::<String, String>::new();
-    // for ikv in vals
-
     let values: HashMap<_, _> = vals
         .into_iter()
         .map(|ikv| {
@@ -481,11 +495,11 @@ pub extern "C" fn ffi_exec_expr(
             (k, v)
         })
         .collect();
-    // .filter(|&v| v % 2 == 0)
-    // .fold(0, |acc, v| acc + v);
 
-    let result = exec_expr(&expr, &values).unwrap();
-    let s_result = expr_to_string(&result, &values);
+    // let values = HashMap::<String, String>::new();
+
+    let result = exec_expr(RefOrValue::Ref(expr), &values).unwrap();
+    let s_result = expr_to_string(&result.get_ref(), &values);
 
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()
