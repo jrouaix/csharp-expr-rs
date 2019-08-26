@@ -71,6 +71,8 @@ type RcExpr = Rc<Expr>;
 type VecRcExpr = Vec<RcExpr>;
 type FunctionImpl = dyn Fn(&VecRcExpr) -> Result<RcExpr, String>;
 type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
+type IdentifierValueGetter = dyn Fn() -> String;
+type IdentifierValues<'a> = HashMap<String, Box<IdentifierValueGetter>>;
 
 #[repr(C)]
 #[derive(Clone)]
@@ -256,14 +258,14 @@ fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList) -> RcExpr {
     }
 }
 
-fn exec_expr<'a>(expr: &'a RcExpr, values: &HashMap<String, String>) -> Result<RcExpr, String> {
+fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<RcExpr, String> {
     match expr.as_ref() {
         Expr::Str(_) => Ok(expr.clone()),
         Expr::Boolean(_) => Ok(expr.clone()),
         Expr::Num(_) => Ok(expr.clone()),
         Expr::Array(_) => Ok(expr.clone()),
         Expr::Identifier(name) => match &values.get(name) {
-            Some(s) => Ok(Rc::new(Expr::Str(s.to_string()))),
+            Some(s) => Ok(Rc::new(Expr::Str(s()))),
             None => Err(format!(
                 "Unable to find value for identifier named '{}'",
                 name
@@ -400,8 +402,8 @@ mod tests {
             Rc::new(|_v: &VecRcExpr| Ok(rc_expr_str!("42".to_string()))),
         );
 
-        let mut values = HashMap::<String, String>::new();
-        values.insert("my".into(), "value".to_string());
+        let mut values = IdentifierValues::new();
+        values.insert("my".into(), Box::new(|| "value".to_string()));
 
         let expression = "first(first(first(my,2,3),2,3),2,3)";
         let result = parse_exec_expr(expression, &funcs, &values);
@@ -412,7 +414,7 @@ mod tests {
     fn parse_exec_expr<'a>(
         expression: &'a str,
         funcs: &FunctionImplList,
-        values: &HashMap<String, String>,
+        values: &IdentifierValues,
     ) -> String {
         let expr = parse_expr(expression).unwrap();
         let expr = prepare_expr(Rc::new(expr), funcs);
@@ -421,14 +423,18 @@ mod tests {
     }
 }
 
+fn str_from_c_char_ptr<'a>(s: *const c_char) -> &'a str {
+    unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    }
+    .to_str()
+    .unwrap()
+}
+
 #[no_mangle]
 pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut RcExpr {
-    let c_str = unsafe {
-        assert!(!expression.is_null());
-        CStr::from_ptr(expression)
-    };
-
-    let r_str = c_str.to_str().unwrap();
+    let r_str = str_from_c_char_ptr(expression);
     let expr = parse_expr(r_str).unwrap();
 
     let mut funcs: FunctionImplList = HashMap::new();
@@ -477,33 +483,28 @@ pub extern "C" fn ffi_exec_expr(
         slice::from_raw_parts(identifier_values, identifier_values_len)
     };
 
-    let values: HashMap<_, _> = vals
-        .into_iter()
-        .map(|ikv| {
-            let k = unsafe {
-                assert!(!ikv.key.is_null());
-                CStr::from_ptr(ikv.key)
-            }
-            .to_str()
-            .unwrap()
-            .to_string();
+    let mut values = IdentifierValues::new();
+    for ikv in vals.into_iter() {
+        let k = str_from_c_char_ptr(ikv.key).to_string();
+        let get_v = Box::new(move || str_from_c_char_ptr(ikv.value).to_string());
+        values.insert(k, get_v);
+    }
 
-            let v = unsafe {
-                assert!(!ikv.value.is_null());
-                CStr::from_ptr(ikv.value)
-            }
-            .to_str()
-            .unwrap()
-            .to_string();
-
-            (k, v)
-        })
-        .collect();
-
-    // let values = HashMap::<String, String>::new();
+    // let values: IdentifierValues = vals
+    //     .iter()
+    //     .map(|ikv| {
+    //         let k = str_from_c_char_ptr(ikv.key).to_string();
+    //         // let get_v = Box::new(|| str_from_c_char_ptr(ikv.value).to_string());
+    //         let v = str_from_c_char_ptr(ikv.value).to_string();
+    //         let get_v = Box::new(move || v);
+    //         (k, get_v)
+    //     })
+    //     .collect();
 
     let result = exec_expr(expr, &values).unwrap();
     let s_result = expr_to_string(&result);
+
+    // drop(expr); ?? ça plante si je fais ça ?
 
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()
