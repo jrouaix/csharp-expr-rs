@@ -16,4 +16,8 @@
     <ProjectReference Include="..\..\src-csharp\csharp-expr-rs\csharp-expr-rs.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="bz-expressions\" />
+  </ItemGroup>
+
 </Project>

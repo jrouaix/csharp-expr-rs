@@ -1,4 +1,5 @@
-﻿using BenchmarkDotNet.Attributes;
+﻿using BeezUP2.Framework.Expressions;
+using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using DynamicExpresso;
 using System;
@@ -15,9 +16,10 @@ namespace csharp_expr_rs.Benchmarks
     {
         private Lambda _dynamicExpression;
         private Expression _rustExpression;
+        private CSharpExpressionDynamicExpresso _bzExpression;
         private Dictionary<string, string> _rustParameters;
 
-        [Params(0, 1, 10, 25, 50)] public int IdentifiersCount { get; set; }
+        [Params(10, 25, 50)] public int IdentifiersCount { get; set; }
         [Params(10, 100, 1000)] public int IdentifiersValueSize { get; set; }
         //[Params(10, 50, 100)] public int ExpressionSize { get; set; }
 
@@ -32,10 +34,16 @@ namespace csharp_expr_rs.Benchmarks
 
             var expression = "first(first(first(first(first(first(first(first(first(first(first(1,2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3)";
 
+            var firstFunction = (Func<object, int, int, object>)((a, b, c) => new[] { a, b, c }.First());
+
             // DynamicExpresso
             var interpreter = new Interpreter(InterpreterOptions.DefaultCaseInsensitive);
-            interpreter.SetFunction("first", (Func<object, int, int, object>)((a, b, c) => new[] { a, b, c }.First()));
+            interpreter.SetFunction("first", firstFunction);
             _dynamicExpression = interpreter.Parse(expression);
+
+            //bz
+            var expression2 = "first(first(first(first(first(first(first(first(first(first(first([a0],2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3)";
+            _bzExpression = new CSharpExpressionDynamicExpresso(expression2, null, new Dictionary<string, Delegate> { { "first", firstFunction } });
 
             //Rust
             _rustExpression = new Expression(expression);
@@ -47,10 +55,18 @@ namespace csharp_expr_rs.Benchmarks
             _rustExpression.Dispose();
         }
 
-        [Benchmark(Baseline = true)]
+        [Benchmark]
         public object DynamicExpresso() => _dynamicExpression.Invoke(_rustParameters.Select(kv => new Parameter(kv.Key, kv.Value)).ToArray());
+
+        [Benchmark(Baseline = true)]
+        public object BzExpression() => _bzExpression.Invoke(_rustParameters);
 
         [Benchmark]
         public object Rust() => _rustExpression.Execute(_rustParameters);
+
+
+        private Dictionary<string, string> _noParams = new Dictionary<string, string>();
+        [Benchmark]
+        public object RustNoParams() => _rustExpression.Execute(_noParams);
     }
 }

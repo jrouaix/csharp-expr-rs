@@ -1,6 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
+using BeezUP2.Framework.Expressions;
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 
 namespace csharp_expr_rs.Benchmarks
@@ -9,6 +13,18 @@ namespace csharp_expr_rs.Benchmarks
     {
         public static void Main(string[] args)
         {
+            //var randy = new Random();
+            //var chars = "abcdefghijklmnopqrsrtwxyz";
+
+            //var rustParameters = Enumerable.Range(0, 10)
+            //    .ToDictionary(i => $"a{i}", i => new String(chars[randy.Next(chars.Length)], 100));
+
+            //var firstFunction = (Func<object, int, int, object>)((a, b, c) => new[] { a, b, c }.First());
+            //var expression = "first(first(first(first(first(first(first(first(first(first(first([a0],2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3)";
+            //var bzExpression = new CSharpExpressionDynamicExpresso(expression, null, new Dictionary<string, Delegate> { { "first", firstFunction } });
+            //var res = bzExpression.Invoke(rustParameters);
+
+
             BenchmarkRunner.Run<TinyExpressionBenchmark>();
             //BenchmarkRunner.Run<CompilationBenchmark>();
         }

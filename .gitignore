@@ -11,3 +11,4 @@ Cargo.lock
 obj
 bin
 /.vs
+/tests-csharp/csharp-expr-rs.Benchmarks/bz-expressions
