@@ -490,22 +490,8 @@ pub extern "C" fn ffi_exec_expr(
         values.insert(k, get_v);
     }
 
-    // let values: IdentifierValues = vals
-    //     .iter()
-    //     .map(|ikv| {
-    //         let k = str_from_c_char_ptr(ikv.key).to_string();
-    //         // let get_v = Box::new(|| str_from_c_char_ptr(ikv.value).to_string());
-    //         let v = str_from_c_char_ptr(ikv.value).to_string();
-    //         let get_v = Box::new(move || v);
-    //         (k, get_v)
-    //     })
-    //     .collect();
-
     let result = exec_expr(expr, &values).unwrap();
     let s_result = expr_to_string(&result);
-
-    // drop(expr); ?? ça plante si je fais ça ?
-
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()
 }

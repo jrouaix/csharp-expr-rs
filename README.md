@@ -20,6 +20,7 @@ c# expression parser in Rust
 - [x] Handle passing values arguments for identifiers from C# side
 - [x] Benchmarks & Optimisations => cloning Expressions was a baaaaaad idea ! /10 perfs drop
 - [x] Could we try some better syntax with type aliasing Rc<Expr>, perhaps some macros ? okay, not bad, not great
+- [ ] Optimisation : lazy evaluation for identifier value getters
 - [ ] Optimisation : Do not pass parameters throught FFI if they are not used by the expression !
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
