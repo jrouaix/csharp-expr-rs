@@ -8,10 +8,12 @@ namespace csharp_expr_rs
     {
         public const string LIB_NAME = "csharp_expr.dll";
 
-        [DllImport(LIB_NAME)]
-        public static extern FFIExpressionHandle ffi_parse_expr(string expression);
+        [DllImport(LIB_NAME, CharSet = CharSet.Unicode)]
+        public static extern FFIExpressionHandle ffi_parse_and_prepare_expr(string expression);
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_expr(IntPtr ptr);
+        [DllImport(LIB_NAME)]
+        public static extern FFIStringHandle ffi_get_identifiers(FFIExpressionHandle ptr);
         [DllImport(LIB_NAME)]
         public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]

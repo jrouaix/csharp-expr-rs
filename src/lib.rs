@@ -10,6 +10,7 @@
 #![deny(bare_trait_objects)]
 
 //external crates
+// use once_cell::unsync::Lazy;
 use std::cmp;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -17,6 +18,7 @@ use std::os::raw::c_char;
 use std::rc::Rc;
 use std::slice;
 use std::vec::Vec;
+
 // use libc::{c_char, uint32_t};
 // use std::ffi::CStr;
 
@@ -85,6 +87,13 @@ pub enum Expr {
     FunctionCall(String, VecRcExpr),
     PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>),
     // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ExprAndIdentifiers {
+    expr: RcExpr,
+    identifiers_names: Vec<String>,
 }
 
 impl fmt::Debug for Expr {
@@ -237,13 +246,26 @@ fn parse_expr<'a>(expression: &'a str) -> Result<Expr, String> {
     }
 }
 
-fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList) -> RcExpr {
-    if let Expr::FunctionCall(name, parameters) = expr.as_ref() {
-        match &funcs.get(name) {
+fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList) -> ExprAndIdentifiers {
+    let mut identifiers = Vec::<String>::new();
+    let expr = prepare_expr(Rc::new(expr), funcs, &mut identifiers);
+    ExprAndIdentifiers {
+        expr: expr,
+        identifiers_names: identifiers,
+    }
+}
+
+fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Vec<String>) -> RcExpr {
+    match expr.as_ref() {
+        Expr::Identifier(name) => {
+            identifiers.push(name.clone());
+            expr
+        }
+        Expr::FunctionCall(name, parameters) => match &funcs.get(name) {
             Some(fnc) => {
                 let parameters = parameters
                     .into_iter()
-                    .map(|p| prepare_expr(p.clone(), &funcs))
+                    .map(|p| prepare_expr(p.clone(), &funcs, identifiers))
                     .collect();
                 Rc::new(Expr::PreparedFunctionCall(
                     name.clone(),
@@ -252,9 +274,8 @@ fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList) -> RcExpr {
                 ))
             }
             None => expr,
-        }
-    } else {
-        expr
+        },
+        _ => expr,
     }
 }
 
@@ -330,6 +351,7 @@ mod tests {
     }
 
     #[test_case(stringify!("test") => "test")]
+    #[test_case(stringify!("t") => "t")]
     #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
     #[test_case(stringify!("test\\slash") => "test\\slash")]
     #[test_case(stringify!("test\newline") => "test\newline")]
@@ -417,8 +439,8 @@ mod tests {
         values: &IdentifierValues,
     ) -> String {
         let expr = parse_expr(expression).unwrap();
-        let expr = prepare_expr(Rc::new(expr), funcs);
-        let result = exec_expr(&expr, values).unwrap();
+        let expr = prepare_expr_and_identifiers(expr, funcs);
+        let result = exec_expr(&expr.expr, values).unwrap();
         expr_to_string(&result)
     }
 }
@@ -433,7 +455,7 @@ fn str_from_c_char_ptr<'a>(s: *const c_char) -> &'a str {
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut RcExpr {
+pub extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut ExprAndIdentifiers {
     let r_str = str_from_c_char_ptr(expression);
     let expr = parse_expr(r_str).unwrap();
 
@@ -454,23 +476,33 @@ pub extern "C" fn ffi_parse_expr(expression: *const c_char) -> *mut RcExpr {
         }),
     );
 
-    let expr = prepare_expr(Rc::new(expr), &funcs);
+    let expr = prepare_expr_and_identifiers(expr, &funcs);
+    Box::into_raw(Box::new(expr))
+}
 
-    let b = Box::new(expr);
-    Box::into_raw(b)
+#[no_mangle]
+pub extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_char {
+    let expr = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    let identifiers_separated = expr.identifiers_names.join("|");
+    let c_str_result = CString::new(identifiers_separated).unwrap();
+    c_str_result.into_raw()
 }
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct IdentifierKeyValue {
+pub struct FFIIdentifierKeyValue {
     key: *const c_char,
     value: *const c_char,
 }
 
 #[no_mangle]
 pub extern "C" fn ffi_exec_expr(
-    ptr: *mut RcExpr,
-    identifier_values: *const IdentifierKeyValue,
+    ptr: *mut ExprAndIdentifiers,
+    identifier_values: *const FFIIdentifierKeyValue,
     identifier_values_len: usize,
 ) -> *mut c_char {
     let expr = unsafe {
@@ -490,14 +522,14 @@ pub extern "C" fn ffi_exec_expr(
         values.insert(k, get_v);
     }
 
-    let result = exec_expr(expr, &values).unwrap();
+    let result = exec_expr(&expr.expr, &values).unwrap();
     let s_result = expr_to_string(&result);
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_free_expr(ptr: *mut RcExpr) {
+pub extern "C" fn ffi_free_expr(ptr: *mut ExprAndIdentifiers) {
     if ptr.is_null() {
         return;
     }

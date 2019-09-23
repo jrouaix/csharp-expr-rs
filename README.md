@@ -20,10 +20,10 @@ c# expression parser in Rust
 - [x] Handle passing values arguments for identifiers from C# side
 - [x] Benchmarks & Optimisations => cloning Expressions was a baaaaaad idea ! /10 perfs drop
 - [x] Could we try some better syntax with type aliasing Rc<Expr>, perhaps some macros ? okay, not bad, not great
-- [ ] Optimisation : lazy evaluation for identifier value getters
 - [ ] Optimisation : Do not pass parameters throught FFI if they are not used by the expression !
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
+- [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/
 - [ ] Error handling on expressions parsing
 - [ ] Result/Error handling on FFI for expressions execution
 - [ ] Modularisation, so anyone can implement their own functions list
@@ -37,6 +37,7 @@ c# expression parser in Rust
 - http://jakegoulding.com/rust-ffi-omnibus/
 - https://dev.to/living_syn/calling-rust-from-c-6hk
 - https://dev.to/luzero/building-crates-so-they-look-like-c-abi-libraries-1ibn
+- https://ndportmann.com/system-runtime-compilerservices-unsafe/
 
 # more reading ?
 - https://bodil.lol/parser-combinators/

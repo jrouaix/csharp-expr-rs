@@ -13,13 +13,26 @@ namespace csharp_expr_rs
     public class Expression : IExpression
     {
         public Expression(string expression)
-            : this(Native.ffi_parse_expr(expression))
+            : this(Native.ffi_parse_and_prepare_expr(expression))
         { }
 
         private readonly FFIExpressionHandle _expressionHandle;
+        private readonly string[] _identifiers;
+
         internal Expression(FFIExpressionHandle expressionFFIPointer)
         {
             _expressionHandle = expressionFFIPointer;
+            var stringHandle = Native.ffi_get_identifiers(_expressionHandle);
+            try
+            {
+                _identifiers = stringHandle.AsString()
+                    .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+                    .ToArray();
+            }
+            finally
+            {
+                stringHandle.Dispose();
+            }
         }
 
         public string Execute(Dictionary<string, string> identifierValues)
