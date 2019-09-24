@@ -24,6 +24,20 @@ namespace csharp_expr_rs.Benchmarks
             //var bzExpression = new CSharpExpressionDynamicExpresso(expression, null, new Dictionary<string, Delegate> { { "first", firstFunction } });
             //var res = bzExpression.Invoke(rustParameters);
 
+            //var identifierValues = new Dictionary<string, string>() { { "test", "42" } };
+            //for (int i = 0; i < 1000000000; i++)
+            //{
+            //    var expression = new Expression("test");
+            //    try
+            //    {
+            //        var result = expression.Execute(identifierValues);
+            //        Console.WriteLine(result);
+            //    }
+            //    finally
+            //    {
+            //        expression.Dispose();
+            //    }
+            //}
 
             BenchmarkRunner.Run<TinyExpressionBenchmark>();
             //BenchmarkRunner.Run<CompilationBenchmark>();
