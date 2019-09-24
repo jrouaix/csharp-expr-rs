@@ -494,7 +494,7 @@ pub extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_ch
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct FFIIdentifierKeyValue {
+pub struct IdentifierKeyValue {
     key: *const c_char,
     value: *const c_char,
 }
@@ -502,7 +502,7 @@ pub struct FFIIdentifierKeyValue {
 #[no_mangle]
 pub extern "C" fn ffi_exec_expr(
     ptr: *mut ExprAndIdentifiers,
-    identifier_values: *const FFIIdentifierKeyValue,
+    identifier_values: *const IdentifierKeyValue,
     identifier_values_len: usize,
 ) -> *mut c_char {
     let expr = unsafe {

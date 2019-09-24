@@ -5,19 +5,17 @@ using System.Text;
 
 namespace csharp_expr_rs
 {
-    public interface IExpression : IDisposable
+    /// <summary>
+    /// If non sealed, implement the proper disposable pattern !
+    /// </summary>
+    public sealed class Expression : IDisposable
     {
-        string Execute(Dictionary<string, string> identifierValues);
-    }
+        private readonly FFIExpressionHandle _expressionHandle;
+        private readonly HashSet<string> _identifiers;
 
-    public class Expression : IExpression
-    {
         public Expression(string expression)
             : this(Native.ffi_parse_and_prepare_expr(expression))
         { }
-
-        private readonly FFIExpressionHandle _expressionHandle;
-        private readonly string[] _identifiers;
 
         internal Expression(FFIExpressionHandle expressionFFIPointer)
         {
@@ -25,9 +23,11 @@ namespace csharp_expr_rs
             var stringHandle = Native.ffi_get_identifiers(_expressionHandle);
             try
             {
-                _identifiers = stringHandle.AsString()
-                    .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                    .ToArray();
+                _identifiers = new HashSet<string>(
+                    stringHandle
+                        .AsString()
+                        .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+                    );
             }
             finally
             {
@@ -37,7 +37,9 @@ namespace csharp_expr_rs
 
         public string Execute(Dictionary<string, string> identifierValues)
         {
-            var idValues = identifierValues.Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value }).ToArray();
+            var idValues = identifierValues
+                .Where(kv => _identifiers.Contains(kv.Key))
+                .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value }).ToArray();
 
             var stringHandle = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
             string result;
