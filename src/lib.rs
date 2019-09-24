@@ -86,7 +86,7 @@ pub enum Expr {
     Identifier(String),
     FunctionCall(String, VecRcExpr),
     PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>),
-    // BinaryOperator(Box<Expr>, Box<Expr>, AssocOp)
+    // BinaryOperator(RcExpr, RcExpr, AssocOp)
 }
 
 #[repr(C)]
@@ -255,6 +255,17 @@ fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList) -> ExprAnd
     }
 }
 
+fn prepare_expr_list(
+    exprs: &VecRcExpr,
+    funcs: &FunctionImplList,
+    identifiers: &mut Vec<String>,
+) -> VecRcExpr {
+    exprs
+        .into_iter()
+        .map(|p| prepare_expr(p.clone(), funcs, identifiers))
+        .collect()
+}
+
 fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Vec<String>) -> RcExpr {
     match expr.as_ref() {
         Expr::Identifier(name) => {
@@ -262,19 +273,16 @@ fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Vec<St
             expr
         }
         Expr::FunctionCall(name, parameters) => match &funcs.get(name) {
-            Some(fnc) => {
-                let parameters = parameters
-                    .into_iter()
-                    .map(|p| prepare_expr(p.clone(), &funcs, identifiers))
-                    .collect();
-                Rc::new(Expr::PreparedFunctionCall(
-                    name.clone(),
-                    parameters,
-                    Rc::clone(&fnc),
-                ))
-            }
+            Some(fnc) => Rc::new(Expr::PreparedFunctionCall(
+                name.clone(),
+                prepare_expr_list(parameters, funcs, identifiers),
+                Rc::clone(fnc),
+            )),
             None => expr,
         },
+        Expr::Array(elements) => {
+            Rc::new(Expr::Array(prepare_expr_list(elements, funcs, identifiers)))
+        }
         _ => expr,
     }
 }
@@ -400,6 +408,19 @@ mod tests {
     #[test_case("test([\"value\", 42],2)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42_f64)])), rc_expr_num!(2_f64)]))]
     fn parse_complexe_expressions(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
+    }
+
+    #[test_case(stringify!("test") => Vec::<String>::new())]
+    #[test_case("test" => vec!["test"])]
+    #[test_case("[test2]" => vec!["test2"])]
+    #[test_case("[test2, test3]" => vec!["test2", "test3"])]
+    #[test_case("[test2, test3, func(test4, test5), test6, test5]" => vec!["test2", "test3", "test4", "test5", "test6"])]
+    fn prepare_expr_and_identifiers_detection(expression: &str) -> Vec<String> {
+        let expr = parse_expr(expression).unwrap();
+        let funcs = FunctionImplList::new();
+        let expr = prepare_expr_and_identifiers(expr, &funcs);
+        println!("{:?}", expr);
+        expr.identifiers_names
     }
 
     #[test]
