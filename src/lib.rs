@@ -12,6 +12,7 @@
 //external crates
 // use once_cell::unsync::Lazy;
 use std::cmp;
+use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::c_char;
@@ -71,6 +72,7 @@ pub enum AssocOp {
 
 type RcExpr = Rc<Expr>;
 type VecRcExpr = Vec<RcExpr>;
+type SliceRcExpr = [RcExpr];
 type FunctionImpl = dyn Fn(&VecRcExpr) -> Result<RcExpr, String>;
 type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 type IdentifierValueGetter = dyn Fn() -> String;
@@ -93,7 +95,7 @@ pub enum Expr {
 #[derive(Debug)]
 pub struct ExprAndIdentifiers {
     expr: RcExpr,
-    identifiers_names: Vec<String>,
+    identifiers_names: HashSet<String>,
 }
 
 impl fmt::Debug for Expr {
@@ -167,7 +169,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcEx
             char('['),
             cut(terminated(
                 map(separated_list(preceded(sp, char(',')), value), |v| {
-                    v.into_iter().map(|x| Rc::new(x)).collect()
+                    v.into_iter().map(Rc::new).collect()
                 }),
                 preceded(sp, char(']')),
             )),
@@ -196,7 +198,7 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
             char('('),
             terminated(
                 map(separated_list(preceded(sp, char(',')), value), |v| {
-                    v.into_iter().map(|x| Rc::new(x)).collect()
+                    v.into_iter().map(Rc::new).collect()
                 }),
                 // map_opt(opt(separated_list(preceded(opt(sp), char(',')), value)), |opt| opt),
                 preceded(opt(sp), char(')')),
@@ -222,9 +224,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
         alt((
             map(double, Expr::Num),
             map(boolean, Expr::Boolean),
-            map_opt(string, |s| {
-                unescape(s).map(|unescaped| Expr::Str(String::from(unescaped)))
-            }),
+            map_opt(string, |s| unescape(s).map(Expr::Str)),
             map(function_call, |(f_name, params)| {
                 Expr::FunctionCall(String::from(f_name), params)
             }),
@@ -238,7 +238,7 @@ fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E>
     delimited(opt(sp), value, opt(sp))(input)
 }
 
-fn parse_expr<'a>(expression: &'a str) -> Result<Expr, String> {
+fn parse_expr(expression: &str) -> Result<Expr, String> {
     let expr = expr::<(&str, ErrorKind)>(expression);
     match expr {
         Ok(ok) => Ok(ok.1),
@@ -247,29 +247,33 @@ fn parse_expr<'a>(expression: &'a str) -> Result<Expr, String> {
 }
 
 fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList) -> ExprAndIdentifiers {
-    let mut identifiers = Vec::<String>::new();
+    let mut identifiers = HashSet::<String>::new();
     let expr = prepare_expr(Rc::new(expr), funcs, &mut identifiers);
     ExprAndIdentifiers {
-        expr: expr,
+        expr,
         identifiers_names: identifiers,
     }
 }
 
 fn prepare_expr_list(
-    exprs: &VecRcExpr,
+    exprs: &SliceRcExpr,
     funcs: &FunctionImplList,
-    identifiers: &mut Vec<String>,
+    identifiers: &mut HashSet<String>,
 ) -> VecRcExpr {
     exprs
-        .into_iter()
+        .iter()
         .map(|p| prepare_expr(p.clone(), funcs, identifiers))
         .collect()
 }
 
-fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Vec<String>) -> RcExpr {
+fn prepare_expr(
+    expr: RcExpr,
+    funcs: &FunctionImplList,
+    identifiers: &mut HashSet<String>,
+) -> RcExpr {
     match expr.as_ref() {
         Expr::Identifier(name) => {
-            identifiers.push(name.clone());
+            identifiers.insert(name.clone());
             expr
         }
         Expr::FunctionCall(name, parameters) => match &funcs.get(name) {
@@ -280,6 +284,17 @@ fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Vec<St
             )),
             None => expr,
         },
+        // Expr::FunctionCall(name, parameters) => {
+        //     let parameters = prepare_expr_list(parameters, funcs, identifiers);
+        //     match &funcs.get(name) {
+        //         Some(fnc) => Rc::new(Expr::PreparedFunctionCall(
+        //             name.clone(),
+        //             parameters,
+        //             Rc::clone(fnc),
+        //         )),
+        //         None => Rc::new(Expr::FunctionCall(name.clone(), parameters)),
+        //     }
+        // }
         Expr::Array(elements) => {
             Rc::new(Expr::Array(prepare_expr_list(elements, funcs, identifiers)))
         }
@@ -311,7 +326,7 @@ fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<RcExp
     }
 }
 
-fn expr_to_string<'a>(expr: &'a Expr) -> String {
+fn expr_to_string(expr: &Expr) -> String {
     match expr {
         Expr::Str(s) => s.to_string(),
         Expr::Boolean(b) => b.to_string(),
@@ -413,14 +428,25 @@ mod tests {
     #[test_case(stringify!("test") => Vec::<String>::new())]
     #[test_case("test" => vec!["test"])]
     #[test_case("[test2]" => vec!["test2"])]
-    #[test_case("[test2, test3]" => vec!["test2", "test3"])]
-    #[test_case("[test2, test3, func(test4, test5), test6, test5]" => vec!["test2", "test3", "test4", "test5", "test6"])]
+    #[test_case("[test2, test3, test2, test3]" => vec!["test2", "test3"])]
+    #[test_case("unknownFunc(test7)" => Vec::<String>::new())]
+    #[test_case("[test2, test3, test3, knownFunc(test4, test5), test6, test5]" => vec!["test2", "test3", "test4", "test5", "test6"])]
     fn prepare_expr_and_identifiers_detection(expression: &str) -> Vec<String> {
         let expr = parse_expr(expression).unwrap();
-        let funcs = FunctionImplList::new();
+        let mut funcs = FunctionImplList::new();
+        funcs.insert(
+            "knownFunc".to_string(),
+            Rc::new(|_v: &VecRcExpr| Ok(rc_expr_num!(42_f64))),
+        );
         let expr = prepare_expr_and_identifiers(expr, &funcs);
         println!("{:?}", expr);
-        expr.identifiers_names
+        let mut result = expr
+            .identifiers_names
+            .iter()
+            .cloned()
+            .collect::<Vec<String>>();
+        result.sort();
+        result
     }
 
     #[test]
@@ -508,7 +534,12 @@ extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_char {
         &mut *ptr
     };
 
-    let identifiers_separated = expr.identifiers_names.join("|");
+    let identifiers_separated = expr
+        .identifiers_names
+        .iter()
+        .cloned()
+        .collect::<Vec<String>>()
+        .join("|");
     let c_str_result = CString::new(identifiers_separated).unwrap();
     c_str_result.into_raw()
 }
@@ -537,7 +568,7 @@ extern "C" fn ffi_exec_expr(
     };
 
     let mut values = IdentifierValues::new();
-    for ikv in vals.into_iter() {
+    for ikv in vals.iter() {
         let k = str_from_c_char_ptr(ikv.key).to_string();
         let get_v = Box::new(move || str_from_c_char_ptr(ikv.value).to_string());
         values.insert(k, get_v);

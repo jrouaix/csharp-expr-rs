@@ -21,7 +21,8 @@ c# expression parser in Rust
 - [x] Benchmarks & Optimisations => cloning Expressions was a baaaaaad idea ! /10 perfs drop
 - [x] Could we try some better syntax with type aliasing Rc<Expr>, perhaps some macros ? okay, not bad, not great
 - [x] Optimisation : Do not pass parameters throught FFI if they are not used by the expression !
-- [ ] More tests about identifiers list
+- [x] More tests about identifiers list
+- [x] Couldn't prepare a function inside an unknown function => OK, expected behavior
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/
