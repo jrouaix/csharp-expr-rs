@@ -476,7 +476,7 @@ fn str_from_c_char_ptr<'a>(s: *const c_char) -> &'a str {
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut ExprAndIdentifiers {
+extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut ExprAndIdentifiers {
     let r_str = str_from_c_char_ptr(expression);
     let expr = parse_expr(r_str).unwrap();
 
@@ -502,7 +502,7 @@ pub extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut 
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_char {
+extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_char {
     let expr = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
@@ -521,7 +521,7 @@ pub struct IdentifierKeyValue {
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_exec_expr(
+extern "C" fn ffi_exec_expr(
     ptr: *mut ExprAndIdentifiers,
     identifier_values: *const IdentifierKeyValue,
     identifier_values_len: usize,
@@ -550,7 +550,7 @@ pub extern "C" fn ffi_exec_expr(
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_free_expr(ptr: *mut ExprAndIdentifiers) {
+extern "C" fn ffi_free_expr(ptr: *mut ExprAndIdentifiers) {
     if ptr.is_null() {
         return;
     }
@@ -560,7 +560,7 @@ pub extern "C" fn ffi_free_expr(ptr: *mut ExprAndIdentifiers) {
 }
 
 #[no_mangle]
-pub extern "C" fn ffi_free_cstring(ptr: *mut c_char) {
+extern "C" fn ffi_free_cstring(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
     }
