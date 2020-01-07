@@ -19,7 +19,7 @@ namespace csharp_expr_rs.Benchmarks
         private CSharpExpressionDynamicExpresso _bzExpression;
         private Dictionary<string, string> _rustParameters;
 
-        [Params(10, 25, 50, 200)] public int IdentifiersCount { get; set; }
+        [Params(1, 2, 3, 5, 8, 10, 25, 50, 200)] public int IdentifiersCount { get; set; }
         [Params(10, 100, 1000)] public int IdentifiersValueSize { get; set; }
         //[Params(10, 50, 100)] public int ExpressionSize { get; set; }
 
@@ -32,14 +32,15 @@ namespace csharp_expr_rs.Benchmarks
             _rustParameters = Enumerable.Range(0, IdentifiersCount)
                 .ToDictionary(i => $"a{i}", i => new String(chars[randy.Next(chars.Length)], IdentifiersValueSize));
 
-            var expression = "first(first(first(first(first(first(first(first(first(first(first(1,2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3)";
+            var expression = "first(first(first(first(first(first(first(first(first(first(first(a0,a1,a2),a3,a4),a5,a6),a7,a8),a9,a10),2,3),2,3),2,3),2,3),2,3),2,3)";
+            var expressionForDExp = "first(first(first(first(first(first(first(first(first(first(first(1,2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3)";
 
             var firstFunction = (Func<object, int, int, object>)((a, b, c) => new[] { a, b, c }.First());
 
             // DynamicExpresso
             var interpreter = new Interpreter(InterpreterOptions.DefaultCaseInsensitive);
             interpreter.SetFunction("first", firstFunction);
-            _dynamicExpression = interpreter.Parse(expression);
+            _dynamicExpression = interpreter.Parse(expressionForDExp);
 
             //bz
             var expression2 = "first(first(first(first(first(first(first(first(first(first(first([a0],2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3),2,3)";
@@ -65,7 +66,7 @@ namespace csharp_expr_rs.Benchmarks
         public object Rust() => _rustExpression.Execute(_rustParameters);
 
 
-        private Dictionary<string, string> _noParams = new Dictionary<string, string>();
+        private readonly Dictionary<string, string> _noParams = new Dictionary<string, string>();
         [Benchmark]
         public object RustNoParams() => _rustExpression.Execute(_noParams);
     }

@@ -347,7 +347,7 @@ fn expr_to_string(expr: &Expr) -> String {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use test_case_derive::test_case;
+    use test_case::test_case;
 
     macro_rules! rc_expr_str {
         ( $x:expr ) => {

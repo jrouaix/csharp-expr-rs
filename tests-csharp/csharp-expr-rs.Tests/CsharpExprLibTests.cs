@@ -53,7 +53,6 @@ namespace csharp_expr_rs.Tests
                     _output.WriteLine(result);
                     result.ShouldBe("42");
 
-
                     result = expression.Execute(new Dictionary<string, string>() { { "test", "43" } });
                     result.ShouldBe("43");
                 }

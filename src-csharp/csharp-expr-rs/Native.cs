@@ -15,7 +15,7 @@ namespace csharp_expr_rs
 
         [DllImport(LIB_NAME)]
         public static extern FFIStringHandle ffi_get_identifiers(FFIExpressionHandle ptr);
-        [DllImport(LIB_NAME)]
+        [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
         public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_cstring(IntPtr ptr);
