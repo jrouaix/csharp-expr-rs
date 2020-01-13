@@ -501,6 +501,21 @@ fn str_from_c_char_ptr<'a>(s: *const c_char) -> &'a str {
     .unwrap()
 }
 
+fn string_from_c_char_ptr(s: *const c_char) -> String {
+    str_from_c_char_ptr(s).to_string()
+}
+
+fn string_from_csharp_string_ptr(s: FFICSharpString) -> String {
+    unsafe{
+        let slice = slice::from_raw_parts(s.ptr, s.len);
+        let utf16_encoding = encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap();
+        let mut decoder = utf16_encoding.new_decoder();
+        let mut utf8 = String::with_capacity(s.len);
+        let recode_result = decoder.decode_to_string(slice, &mut utf8, true);
+        utf8
+    } 
+}
+
 #[no_mangle]
 extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut ExprAndIdentifiers {
     let r_str = str_from_c_char_ptr(expression);
@@ -551,6 +566,13 @@ pub struct IdentifierKeyValue {
     value: *const c_char,
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct FFICSharpString {
+    ptr: *const u8,
+    len: usize,
+}
+
 #[no_mangle]
 extern "C" fn ffi_exec_expr(
     ptr: *mut ExprAndIdentifiers,
@@ -569,8 +591,8 @@ extern "C" fn ffi_exec_expr(
 
     let mut values = IdentifierValues::new();
     for ikv in vals.iter() {
-        let k = str_from_c_char_ptr(ikv.key).to_string();
-        let get_v = Box::new(move || str_from_c_char_ptr(ikv.value).to_string());
+        let k = string_from_c_char_ptr(ikv.key);
+        let get_v = Box::new(move || string_from_c_char_ptr(ikv.value));
         values.insert(k, get_v);
     }
 
@@ -598,27 +620,16 @@ extern "C" fn ffi_free_cstring(ptr: *mut c_char) {
     unsafe { CString::from_raw(ptr) };
 }
 
+
+
 #[no_mangle]
-extern "C" fn test(ptr: *const u8, len: usize) -> *mut c_char {
-    unsafe {
-        assert!(!ptr.is_null());
+extern "C" fn ffi_test(param: FFICSharpString) -> *mut c_char {
+    assert!(!param.ptr.is_null());
 
-        let slice = slice::from_raw_parts(ptr, len);
-        println!("{:?}", slice);
+    let utf8 = string_from_csharp_string_ptr(param);
+    println!("utf-16 to utf-8 decoded: {}", utf8);
 
-        let s = str::from_utf8(slice).unwrap();
-        println!("{}", s);
-
-        let utf16_encoding = encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap();
-        let mut decoder = utf16_encoding.new_decoder();
-        let mut utf8 = String::with_capacity(len);
-        let red = decoder.decode_to_string(slice, &mut utf8, true);
-        println!("{:?}", red);
-        utf8.push_str("|");
-        println!("{}", utf8);
-
-        return CString::new("ok").unwrap().into_raw();
-        let c_str_result = CString::new(s).unwrap();
-        c_str_result.into_raw()
-    }
+    return CString::new("ok").unwrap().into_raw();
+    // let c_str_result = CString::new(s).unwrap();
+    // c_str_result.into_raw()
 }

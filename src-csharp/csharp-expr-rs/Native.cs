@@ -21,15 +21,22 @@ namespace csharp_expr_rs
         public static extern void ffi_free_cstring(IntPtr ptr);
 
         [DllImport(LIB_NAME)]
-        public static unsafe extern FFIStringHandle test(char* ptr, UIntPtr len);
+        public static unsafe extern FFIStringHandle ffi_test(FFICSharpString sharpString);
     }
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct FFIIdentifierKeyValue
     {
         public string key;
-        public string value;
-    };
+        public FFICSharpString value;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct FFICSharpString
+    {
+        public char* ptr;
+        public UIntPtr len;
+    }
 
     internal class FFIStringHandle : SafeHandle
     {

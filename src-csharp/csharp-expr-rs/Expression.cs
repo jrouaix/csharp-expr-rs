@@ -29,22 +29,19 @@ namespace csharp_expr_rs
 
         public string Execute(Dictionary<string, string> identifierValues)
         {
-            var idValues = identifierValues
-                .Where(kv => _identifiers.Contains(kv.Key))
-                .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value }).ToArray();
-
-            var str = "test";// Guid.NewGuid().ToString();
-            var utf8 = Encoding.UTF8.GetBytes(str);
-            var utf16 = Encoding.Default.GetBytes(str);
             unsafe
             {
-                //var t = (Span<string>)null;
+                //var idValues = identifierValues
+                //    .Where(kv => _identifiers.Contains(kv.Key))
+                //    .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value })
+                //    .ToArray();
+
+                var str = "test";
+
                 fixed (char* ptr = str)
                 {
                     var len = (UIntPtr)(str.Length * sizeof(Char));
-                    var res = Native.test(ptr, len).AsStringAndDispose();
-
-                    var ok = str == res;
+                    Native.ffi_test(new FFICSharpString { ptr = ptr, len = len }).AsStringAndDispose();
                 }
 
 
@@ -53,9 +50,10 @@ namespace csharp_expr_rs
 
             }
 
-            string result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length)
-                .AsStringAndDispose();
-            return result;
+            //string result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length)
+            //    .AsStringAndDispose();
+            //return result;
+            return null;
         }
 
         public void Dispose()
