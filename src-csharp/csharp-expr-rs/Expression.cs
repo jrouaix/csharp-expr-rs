@@ -5,6 +5,25 @@ using System.Text;
 
 namespace csharp_expr_rs
 {
+    public class SomeTest
+    {
+        public void Test()
+        {
+            unsafe
+            {
+                var str = "test";
+
+                fixed (char* ptr = str)
+                {
+                    var len = (UIntPtr)(str.Length * sizeof(char));
+                    Native.ffi_test(new FFICSharpString { ptr = ptr, len = len }).AsStringAndDispose();
+                }
+            }
+            //var pCh1 = test.GetPinnableReference();
+            //byte* pc = (byte*)&pCh1;
+        }
+    }
+
     /// <summary>
     /// If non sealed, implement the proper disposable pattern !
     /// </summary>
@@ -31,29 +50,24 @@ namespace csharp_expr_rs
         {
             unsafe
             {
-                //var idValues = identifierValues
-                //    .Where(kv => _identifiers.Contains(kv.Key))
-                //    .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value })
-                //    .ToArray();
+                var idValues = identifierValues
+                    .Where(kv => _identifiers.Contains(kv.Key))
+                    .Select(kv =>
+                    {
+                        var str = kv.Value;
+                        var len = (UIntPtr)(str.Length * sizeof(char));
+                        fixed (char* ptr = str)
+                        {
+                            return new FFIIdentifierKeyValue { key = kv.Key, value = new FFICSharpString { ptr = ptr, len = len } };
+                        }
+                    })
+                    .ToArray();
 
-                var str = "test";
+                string result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length)
+                    .AsStringAndDispose();
 
-                fixed (char* ptr = str)
-                {
-                    var len = (UIntPtr)(str.Length * sizeof(Char));
-                    Native.ffi_test(new FFICSharpString { ptr = ptr, len = len }).AsStringAndDispose();
-                }
-
-
-                //var pCh1 = test.GetPinnableReference();
-                //byte* pc = (byte*)&pCh1;
-
+                return result;
             }
-
-            //string result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length)
-            //    .AsStringAndDispose();
-            //return result;
-            return null;
         }
 
         public void Dispose()

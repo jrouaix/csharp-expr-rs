@@ -19,7 +19,7 @@ namespace csharp_expr_rs.Benchmarks
         private CSharpExpressionDynamicExpresso _bzExpression;
         private Dictionary<string, string> _rustParameters;
 
-        [Params(1, 2, 3, 5, 8, 10, 25, 50, 200)] public int IdentifiersCount { get; set; }
+        [Params(1, 5, 10, 50, 200)] public int IdentifiersCount { get; set; }
         [Params(10, 100, 1000)] public int IdentifiersValueSize { get; set; }
         //[Params(10, 50, 100)] public int ExpressionSize { get; set; }
 

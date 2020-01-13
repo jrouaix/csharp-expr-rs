@@ -506,14 +506,14 @@ fn string_from_c_char_ptr(s: *const c_char) -> String {
 }
 
 fn string_from_csharp_string_ptr(s: FFICSharpString) -> String {
-    unsafe{
+    unsafe {
         let slice = slice::from_raw_parts(s.ptr, s.len);
         let utf16_encoding = encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap();
         let mut decoder = utf16_encoding.new_decoder();
         let mut utf8 = String::with_capacity(s.len);
         let recode_result = decoder.decode_to_string(slice, &mut utf8, true);
         utf8
-    } 
+    }
 }
 
 #[no_mangle]
@@ -563,11 +563,11 @@ extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_char {
 #[derive(Debug)]
 pub struct IdentifierKeyValue {
     key: *const c_char,
-    value: *const c_char,
+    value: FFICSharpString,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct FFICSharpString {
     ptr: *const u8,
     len: usize,
@@ -584,18 +584,21 @@ extern "C" fn ffi_exec_expr(
         &mut *ptr
     };
 
+    // println!("0");
     let vals = unsafe {
         assert!(!identifier_values.is_null());
         slice::from_raw_parts(identifier_values, identifier_values_len)
     };
 
+    // println!("1");
     let mut values = IdentifierValues::new();
     for ikv in vals.iter() {
         let k = string_from_c_char_ptr(ikv.key);
-        let get_v = Box::new(move || string_from_c_char_ptr(ikv.value));
+        let get_v = Box::new(move || string_from_csharp_string_ptr(ikv.value));
         values.insert(k, get_v);
     }
 
+    // println!("2");
     let result = exec_expr(&expr.expr, &values).unwrap();
     let s_result = expr_to_string(&result);
     let c_str_result = CString::new(s_result).unwrap();
@@ -619,8 +622,6 @@ extern "C" fn ffi_free_cstring(ptr: *mut c_char) {
     }
     unsafe { CString::from_raw(ptr) };
 }
-
-
 
 #[no_mangle]
 extern "C" fn ffi_test(param: FFICSharpString) -> *mut c_char {
