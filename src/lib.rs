@@ -505,11 +505,18 @@ fn string_from_c_char_ptr(s: *const c_char) -> String {
     str_from_c_char_ptr(s).to_string()
 }
 
+#[macro_use]
+extern crate lazy_static;
+
+lazy_static! {
+    static ref UTF16: &'static encoding_rs::Encoding =
+        { encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap() };
+}
+
 fn string_from_csharp_string_ptr(s: FFICSharpString) -> String {
     unsafe {
         let slice = slice::from_raw_parts(s.ptr, s.len);
-        let utf16_encoding = encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap();
-        let mut decoder = utf16_encoding.new_decoder();
+        let mut decoder = UTF16.new_decoder();
         let mut utf8 = String::with_capacity(s.len);
         let recode_result = decoder.decode_to_string(slice, &mut utf8, true);
         utf8
