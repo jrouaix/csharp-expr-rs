@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "csharp-expr-rs.ConsoleTests": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "RUST_BACKTRACE": "1"
+      }
+    }
+  }
+}

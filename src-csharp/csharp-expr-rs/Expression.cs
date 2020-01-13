@@ -20,19 +20,11 @@ namespace csharp_expr_rs
         internal Expression(FFIExpressionHandle expressionFFIPointer)
         {
             _expressionHandle = expressionFFIPointer;
-            var stringHandle = Native.ffi_get_identifiers(_expressionHandle);
-            try
-            {
-                _identifiers = new HashSet<string>(
-                    stringHandle
-                        .AsString()
-                        .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+            _identifiers = new HashSet<string>(
+                Native.ffi_get_identifiers(_expressionHandle)
+                    .AsStringAndDispose()
+                    .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
                     );
-            }
-            finally
-            {
-                stringHandle.Dispose();
-            }
         }
 
         public string Execute(Dictionary<string, string> identifierValues)
@@ -41,16 +33,28 @@ namespace csharp_expr_rs
                 .Where(kv => _identifiers.Contains(kv.Key))
                 .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value }).ToArray();
 
-            var stringHandle = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
-            string result;
-            try
+            var str = "test";// Guid.NewGuid().ToString();
+            var utf8 = Encoding.UTF8.GetBytes(str);
+            var utf16 = Encoding.Default.GetBytes(str);
+            unsafe
             {
-                result = stringHandle.AsString();
+                //var t = (Span<string>)null;
+                fixed (char* ptr = str)
+                {
+                    var len = (UIntPtr)(str.Length * sizeof(Char));
+                    var res = Native.test(ptr, len).AsStringAndDispose();
+
+                    var ok = str == res;
+                }
+
+
+                //var pCh1 = test.GetPinnableReference();
+                //byte* pc = (byte*)&pCh1;
+
             }
-            finally
-            {
-                stringHandle.Dispose();
-            }
+
+            string result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length)
+                .AsStringAndDispose();
             return result;
         }
 

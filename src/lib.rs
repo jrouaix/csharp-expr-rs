@@ -597,3 +597,28 @@ extern "C" fn ffi_free_cstring(ptr: *mut c_char) {
     }
     unsafe { CString::from_raw(ptr) };
 }
+
+#[no_mangle]
+extern "C" fn test(ptr: *const u8, len: usize) -> *mut c_char {
+    unsafe {
+        assert!(!ptr.is_null());
+
+        let slice = slice::from_raw_parts(ptr, len);
+        println!("{:?}", slice);
+
+        let s = str::from_utf8(slice).unwrap();
+        println!("{}", s);
+
+        let utf16_encoding = encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap();
+        let mut decoder = utf16_encoding.new_decoder();
+        let mut utf8 = String::with_capacity(len);
+        let red = decoder.decode_to_string(slice, &mut utf8, true);
+        println!("{:?}", red);
+        utf8.push_str("|");
+        println!("{}", utf8);
+
+        return CString::new("ok").unwrap().into_raw();
+        let c_str_result = CString::new(s).unwrap();
+        c_str_result.into_raw()
+    }
+}

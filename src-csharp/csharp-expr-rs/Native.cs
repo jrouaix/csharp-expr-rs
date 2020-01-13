@@ -19,6 +19,9 @@ namespace csharp_expr_rs
         public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_cstring(IntPtr ptr);
+
+        [DllImport(LIB_NAME)]
+        public static unsafe extern FFIStringHandle test(char* ptr, UIntPtr len);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -41,6 +44,18 @@ namespace csharp_expr_rs
             byte[] buffer = new byte[len];
             Marshal.Copy(handle, buffer, 0, buffer.Length);
             return Encoding.UTF8.GetString(buffer);
+        }
+
+        public string AsStringAndDispose()
+        {
+            try
+            {
+                return AsString();
+            }
+            finally
+            {
+                Dispose();
+            }
         }
 
         protected override bool ReleaseHandle()
