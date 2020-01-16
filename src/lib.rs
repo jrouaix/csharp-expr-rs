@@ -505,14 +505,6 @@ fn string_from_c_char_ptr(s: *const c_char) -> String {
     str_from_c_char_ptr(s).to_string()
 }
 
-#[macro_use]
-extern crate lazy_static;
-
-lazy_static! {
-    static ref UTF163: &'static encoding_rs::Encoding =
-        { encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap() };
-}
-
 use once_cell::sync::Lazy;
 
 static UTF16: Lazy<&'static encoding_rs::Encoding> = Lazy::new(|| {
