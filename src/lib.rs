@@ -509,9 +509,16 @@ fn string_from_c_char_ptr(s: *const c_char) -> String {
 extern crate lazy_static;
 
 lazy_static! {
-    static ref UTF16: &'static encoding_rs::Encoding =
+    static ref UTF163: &'static encoding_rs::Encoding =
         { encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap() };
 }
+
+use once_cell::sync::Lazy;
+
+static UTF16: Lazy<&'static encoding_rs::Encoding> = Lazy::new(|| {
+    let encoding = encoding_rs::Encoding::for_label("UTF-16".as_bytes()).unwrap();
+    encoding
+});
 
 fn string_from_csharp_string_ptr(s: FFICSharpString) -> String {
     unsafe {
@@ -591,13 +598,11 @@ extern "C" fn ffi_exec_expr(
         &mut *ptr
     };
 
-    // println!("0");
     let vals = unsafe {
         assert!(!identifier_values.is_null());
         slice::from_raw_parts(identifier_values, identifier_values_len)
     };
 
-    // println!("1");
     let mut values = IdentifierValues::new();
     for ikv in vals.iter() {
         let k = string_from_c_char_ptr(ikv.key);
@@ -605,7 +610,6 @@ extern "C" fn ffi_exec_expr(
         values.insert(k, get_v);
     }
 
-    // println!("2");
     let result = exec_expr(&expr.expr, &values).unwrap();
     let s_result = expr_to_string(&result);
     let c_str_result = CString::new(s_result).unwrap();
