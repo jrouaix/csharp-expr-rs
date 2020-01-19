@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+
+[assembly: InternalsVisibleTo("csharp-expr-rs.Tests")]
 
 namespace csharp_expr_rs
 {

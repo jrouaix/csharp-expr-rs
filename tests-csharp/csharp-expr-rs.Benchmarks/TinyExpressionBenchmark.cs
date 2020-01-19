@@ -56,8 +56,8 @@ namespace csharp_expr_rs.Benchmarks
             _rustExpression.Dispose();
         }
 
-        [Benchmark]
-        public object DynamicExpresso() => _dynamicExpression.Invoke(_rustParameters.Select(kv => new Parameter(kv.Key, kv.Value)).ToArray());
+        //[Benchmark]
+        //public object DynamicExpresso() => _dynamicExpression.Invoke(_rustParameters.Select(kv => new Parameter(kv.Key, kv.Value)).ToArray());
 
         [Benchmark(Baseline = true)]
         public object BzExpression() => _bzExpression.Invoke(_rustParameters);
@@ -66,8 +66,8 @@ namespace csharp_expr_rs.Benchmarks
         public object Rust() => _rustExpression.Execute(_rustParameters);
 
 
-        private readonly Dictionary<string, string> _noParams = new Dictionary<string, string>();
-        [Benchmark]
-        public object RustNoParams() => _rustExpression.Execute(_noParams);
+        //private readonly Dictionary<string, string> _noParams = new Dictionary<string, string>();
+        //[Benchmark]
+        //public object RustNoParams() => _rustExpression.Execute(_noParams);
     }
 }
