@@ -9,10 +9,11 @@ use std::rc::Rc;
 pub type RcExpr = Rc<Expr>;
 pub type VecRcExpr = Vec<RcExpr>;
 pub type SliceRcExpr = [RcExpr];
-pub type FunctionImpl = dyn Fn(&VecRcExpr) -> Result<RcExpr, String>;
+pub type ExprFuncResult = Result<RcExpr, String>;
+pub type FunctionImpl = dyn Fn(&VecRcExpr, &IdentifierValues) -> ExprFuncResult;
 pub type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 pub type IdentifierValueGetter = dyn Fn() -> String;
-pub type IdentifierValues<'a> = HashMap<String, Box<IdentifierValueGetter>>;
+pub type IdentifierValues = HashMap<String, Box<IdentifierValueGetter>>;
 
 #[repr(C)]
 #[derive(Clone)]
@@ -65,6 +66,20 @@ impl cmp::PartialEq for Expr {
                 n_a == n_b && p_a == p_b
             }
             _ => false,
+        }
+    }
+}
+
+impl ToString for Expr {
+    fn to_string(&self) -> String {
+        match self {
+            Expr::Str(s) => s.to_string(),
+            Expr::Boolean(b) => b.to_string(),
+            Expr::Num(n) => n.to_string(),
+            Expr::Array(_) => "Array".to_string(),
+            Expr::Identifier(i) => format!("[{}]", i),
+            Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
+            Expr::PreparedFunctionCall(_, _, _) => "PreparedFunctionCall".to_string(),
         }
     }
 }
@@ -151,26 +166,9 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<R
             Err(format!("Unable to find the function named '{}'", name))
         }
         Expr::PreparedFunctionCall(_, parameters, fnc) => {
-            let call_result = fnc(&parameters)?;
+            let call_result = fnc(&parameters, &values)?;
             exec_expr(&call_result, values)
         }
-    }
-}
-
-pub fn expr_to_string(expr: &Expr) -> String {
-    match expr {
-        Expr::Str(s) => s.to_string(),
-        Expr::Boolean(b) => b.to_string(),
-        Expr::Num(n) => n.to_string(),
-        Expr::Array(_) => "Array".to_string(),
-        Expr::Identifier(i) => format!("[{}]", i),
-        // Expr::Identifier(name) => match &values.get(name) {
-        //     Some(s) => s.to_string(),
-        //     None => format!("Unable to find value for identifier named '{}'", name),
-        // },
-        // Expr::BinaryOperator(_, _, _) => Ok(expr),
-        Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
-        Expr::PreparedFunctionCall(_, _, _) => "PreparedFunctionCall".to_string(),
     }
 }
 
@@ -267,7 +265,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             "knownFunc".to_string(),
-            Rc::new(|_v: &VecRcExpr| Ok(rc_expr_num!(42_f64))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(rc_expr_num!(42_f64))),
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs);
         println!("{:?}", expr);
@@ -285,7 +283,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             "first".to_string(),
-            Rc::new(|v: &VecRcExpr| {
+            Rc::new(|v: &VecRcExpr, _: &IdentifierValues| {
                 v.first().map_or_else(
                     || Err("There was no first value.".to_string()),
                     |x| Ok(x.clone()),
@@ -295,11 +293,11 @@ mod tests {
 
         funcs.insert(
             "forty_two".to_string(),
-            Rc::new(|_v: &VecRcExpr| Ok(rc_expr_num!(42_f64))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(rc_expr_num!(42_f64))),
         );
         funcs.insert(
             "forty_two_str".to_string(),
-            Rc::new(|_v: &VecRcExpr| Ok(rc_expr_str!("42".to_string()))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(rc_expr_str!("42".to_string()))),
         );
 
         let mut values = IdentifierValues::new();
@@ -319,6 +317,6 @@ mod tests {
         let expr = parse_expr(expression).unwrap();
         let expr = prepare_expr_and_identifiers(expr, funcs);
         let result = exec_expr(&expr.expr, values).unwrap();
-        expr_to_string(&result)
+        result.to_string()
     }
 }

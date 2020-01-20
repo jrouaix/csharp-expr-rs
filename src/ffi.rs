@@ -45,12 +45,12 @@ extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut Expr
 
     funcs.insert(
         "true".to_string(),
-        Rc::new(|_: &VecRcExpr| Ok(Rc::new(Expr::Boolean(true)))),
+        Rc::new(|_: &VecRcExpr, _: &IdentifierValues| Ok(Rc::new(Expr::Boolean(true)))),
     );
 
     funcs.insert(
         "first".to_string(),
-        Rc::new(|v: &VecRcExpr| {
+        Rc::new(|v: &VecRcExpr, _: &IdentifierValues| {
             v.first().map_or_else(
                 || Err("There was no first value.".to_string()),
                 |x| Ok(x.clone()),
@@ -117,7 +117,7 @@ extern "C" fn ffi_exec_expr(
     }
 
     let result = exec_expr(&expr.expr, &values).unwrap();
-    let s_result = expr_to_string(&result);
+    let s_result = result.to_string();
     let c_str_result = CString::new(s_result).unwrap();
     c_str_result.into_raw()
 }
