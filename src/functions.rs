@@ -5,6 +5,10 @@ fn ok_result(expr: Expr) -> ExprFuncResult {
     Ok(Rc::new(expr))
 }
 
+fn error_result(error: String) -> ExprFuncResult {
+    Err(error)
+}
+
 // fn is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 //     let len = params.len();
 //     if len == 0 {

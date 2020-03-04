@@ -21,6 +21,7 @@ pub enum Expr {
     Str(String),
     Boolean(bool),
     Num(f64),
+    Null,
     Array(VecRcExpr),
     Identifier(String),
     FunctionCall(String, VecRcExpr),
@@ -41,6 +42,7 @@ impl fmt::Debug for Expr {
             Expr::Str(x) => write!(f, "Str({:?})", x),
             Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
             Expr::Num(x) => write!(f, "Num({:?})", x),
+            Expr::Null => write!(f, "Null"),
             Expr::Array(x) => write!(f, "Array({:?})", x),
             Expr::Identifier(x) => write!(f, "Identifier({:?})", x),
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
@@ -57,6 +59,7 @@ impl cmp::PartialEq for Expr {
             (Expr::Str(x_a), Expr::Str(x_b)) => x_a == x_b,
             (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
+            (Expr::Null, Expr::Null) => true,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => {
@@ -76,6 +79,7 @@ impl ToString for Expr {
             Expr::Str(s) => s.to_string(),
             Expr::Boolean(b) => b.to_string(),
             Expr::Num(n) => n.to_string(),
+            Expr::Null => "null".to_string(),
             Expr::Array(_) => "Array".to_string(),
             Expr::Identifier(i) => format!("[{}]", i),
             Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
@@ -153,6 +157,7 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<R
         Expr::Str(_) => Ok(expr.clone()),
         Expr::Boolean(_) => Ok(expr.clone()),
         Expr::Num(_) => Ok(expr.clone()),
+        Expr::Null => Ok(Rc::new(Expr::Null)),
         Expr::Array(_) => Ok(expr.clone()),
         Expr::Identifier(name) => match &values.get(name) {
             Some(s) => Ok(Rc::new(Expr::Str(s()))),
@@ -188,6 +193,11 @@ mod tests {
             Rc::new(Expr::Num($x))
         };
     }
+    macro_rules! rc_expr_null {
+        () => {
+            Rc::new(Expr::Null)
+        };
+    }
 
     #[test]
     fn parse_parameters() {
@@ -202,6 +212,7 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
+    #[test_case(stringify!("null") => "null")]
     #[test_case(stringify!("test") => "test")]
     #[test_case(stringify!("t") => "t")]
     #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
@@ -227,6 +238,11 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
+    #[test_case("null" => Expr::Null)]
+    fn parse_null(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
     #[test_case("id" => Expr::Identifier("id".to_string()))]
     #[test_case("@idarobase" => Expr::Identifier("idarobase".to_string()))]
     #[test_case("id_id" => Expr::Identifier("id_id".to_string()))]
@@ -249,7 +265,7 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test([\"value\", 42],2)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42_f64)])), rc_expr_num!(2_f64)]))]
+    #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42_f64), rc_expr_null!()])), rc_expr_num!(2_f64), rc_expr_str!("null".to_string())]))]
     fn parse_complexe_expressions(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }

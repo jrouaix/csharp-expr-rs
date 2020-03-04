@@ -34,6 +34,11 @@ fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool,
     alt((map(tag("false"), |_| false), map(tag("true"), |_| true)))(input)
 }
 
+/// null combinator
+fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
+    map(tag("null"), |_| ())(input)
+}
+
 /// full string combinator
 fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     context(
@@ -104,6 +109,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
         sp,
         alt((
             map(double, Expr::Num),
+            map(null, |_| Expr::Null),
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),
             map(function_call, |(f_name, params)| {

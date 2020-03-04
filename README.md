@@ -23,6 +23,7 @@ c# expression parser in Rust
 - [x] Optimisation : Do not pass parameters throught FFI if they are not used by the expression !
 - [x] More tests about identifiers list
 - [x] Couldn't prepare a function inside an unknown function => OK, expected behavior
+- [x] Handle `null` value (just in case)
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/
