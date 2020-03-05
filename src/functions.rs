@@ -94,6 +94,9 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("IsBlank".to_string(), Rc::new(f_is_null));
     funcs.insert("AreEquals".to_string(), Rc::new(f_are_equals));
     funcs.insert("In".to_string(), Rc::new(f_in));
+    funcs.insert("InLike".to_string(), Rc::new(f_in_like));
+    funcs.insert("FirstNotNull".to_string(), Rc::new(f_first_not_null));
+    funcs.insert("FirstNotEmpty".to_string(), Rc::new(f_first_not_null));
     funcs
 }
 
@@ -112,13 +115,13 @@ pub fn get_functions() -> FunctionImplList {
 /**********************************/
 
 // IsNull, IsBlank
-pub fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let res = is_null(params, values)?;
     Ok(Rc::new(Expr::Boolean(res)))
 }
 
 // AreEquals
-pub fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "AreEquals")?;
     let left = exec_expr(params.get(0).unwrap(), values)?;
     let right = exec_expr(params.get(1).unwrap(), values)?;
@@ -127,7 +130,7 @@ pub fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 }
 
 // In
-pub fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "In")?;
     let search = exec_expr(params.get(0).unwrap(), values)?;
     for p in params.iter().skip(1) {
@@ -139,59 +142,28 @@ pub fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     return Ok(Rc::new(Expr::Boolean(false)));
 }
 
-// [ExpressionFunction(MiscCatName)]
-// public static Result In(object value, params object[] possibleValues) => new Result(() => // => new Result(() => possibleValues.Any(v => ObjectIsEqualToResult(v, value)));
-//     {
-//         if (Result.IsObjError(value)) return value;
+// InLike
+fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_min_params_count(params, 2, "In")?;
+    let search = exec_expr(params.get(0).unwrap(), values)?;
+    for p in params.iter().skip(1) {
+        let p_result = exec_expr(p, values)?;
+        todo!("SQL like");
+        // if expr_like(&search, &p_result) {
+        //     return Ok(Rc::new(Expr::Boolean(true)));
+        // }
+    }
+    return Ok(Rc::new(Expr::Boolean(false)));
+}
 
-//         foreach (var test in possibleValues)
-//         {
-//             if (Result.IsObjError(test)) return test;
-
-//             var equal = ObjectIsEqualToResult(test, value);
-
-//             if (Result.IsObjError(equal)) return equal;
-
-//             if (BoolValue(equal)) return true;
-//         }
-
-//         return false;
-//     });
-
-// [ExpressionFunction(MiscCatName)]
-// public static Result InLike(object value, params object[] possibleLikeValues) => new Result(() => //  => new Result(() => possibleLikeValues.Any(v => ObjectIsLikeResult(value, v)));
-//     {
-//         if (Result.IsObjError(value)) return value;
-
-//         foreach (var test in possibleLikeValues)
-//         {
-//             if (Result.IsObjError(test)) return test;
-
-//             var like = ObjectIsLikeResult(value, test);
-
-//             if (Result.IsObjError(like)) return like;
-
-//             if (BoolValue(like)) return true;
-//         }
-
-//         return false;
-//     });
-
-// [ExpressionFunction(MiscCatName, "FirstNotEmpty")]
-// public static Result FirstNotNull(params object[] values) => new Result(() =>
-//     {
-//         foreach (var v in values)
-//         {
-//             if (Result.IsObjError(v)) return v;
-
-//             var isnull = ObjectIsNullResult(v);
-
-//             if (Result.IsObjError(isnull)) return isnull;
-
-//             if (!BoolValue(isnull)) return v;
-//         }
-
-//         return null;
-//     });
-
-// #endregion
+// FirstNotNull, FirstNotEmpty
+fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    for p in params.iter() {
+        let p_result = exec_expr(p, values)?;
+        match *p_result {
+            Expr::Null => {}
+            _ => return Ok(p_result),
+        }
+    }
+    Ok(Rc::new(Expr::Null))
+}

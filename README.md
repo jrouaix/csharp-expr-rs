@@ -24,13 +24,15 @@ c# expression parser in Rust
 - [x] More tests about identifiers list
 - [x] Couldn't prepare a function inside an unknown function => OK, expected behavior
 - [x] Handle `null` value (just in case)
+- [ ] Implement existing functions in BZP system & compare performances
+- [ ] Implement Sql Like function
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/
 - [ ] Error handling on expressions parsing
 - [ ] Result/Error handling on FFI for expressions execution
 - [ ] Modularisation, so anyone can implement their own functions list
-- [ ] Implement existing functions in BZP system & compare performances
+- [ ] Case insensitive function names
 - [ ] Handle Assoc/Binary operators
 - [ ] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate)
 - [ ] Publish on crates.io
