@@ -76,7 +76,7 @@ impl ToString for Expr {
             Expr::Str(s) => s.to_string(),
             Expr::Boolean(b) => b.to_string(),
             Expr::Num(n) => n.to_string(),
-            Expr::Null => "null".to_string(),
+            Expr::Null => "".to_string(),
             Expr::Array(_) => "Array".to_string(),
             Expr::Identifier(i) => format!("[{}]", i),
             Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
@@ -320,6 +320,8 @@ mod tests {
     #[test_case("In(true, 42, true, false)" => "true")]
     #[test_case("In(\"ok\", 42, true, \"ok\")" => "true")]
     #[test_case("In(42, 42, true, \"ok\")" => "true")]
+    #[test_case("Concat(42, 42, true, \"ok\")" => "4242trueok")]
+    #[test_case("Concatenate(null, \"42\", true, \"ok\", In(42, 3.14))" => "42trueokfalse")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

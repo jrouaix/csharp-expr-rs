@@ -46,7 +46,7 @@ fn expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<String, St
     if res.is_final() {
         Ok(res.to_string())
     } else {
-        Err("Can't change this Expression to string".to_string())
+        Err("Can't change this expression to string".to_string())
     }
 }
 
@@ -97,6 +97,8 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("InLike".to_string(), Rc::new(f_in_like));
     funcs.insert("FirstNotNull".to_string(), Rc::new(f_first_not_null));
     funcs.insert("FirstNotEmpty".to_string(), Rc::new(f_first_not_null));
+    funcs.insert("Concatenate".to_string(), Rc::new(f_concat));
+    funcs.insert("Concat".to_string(), Rc::new(f_concat));
     funcs
 }
 
@@ -117,7 +119,7 @@ pub fn get_functions() -> FunctionImplList {
 // IsNull, IsBlank
 fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let res = is_null(params, values)?;
-    Ok(Rc::new(Expr::Boolean(res)))
+    ok_result(Expr::Boolean(res))
 }
 
 // AreEquals
@@ -126,7 +128,7 @@ fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     let left = exec_expr(params.get(0).unwrap(), values)?;
     let right = exec_expr(params.get(1).unwrap(), values)?;
     let res = expr_are_equals(&left, &right);
-    Ok(Rc::new(Expr::Boolean(res)))
+    ok_result(Expr::Boolean(res))
 }
 
 // In
@@ -136,10 +138,10 @@ fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for p in params.iter().skip(1) {
         let p_result = exec_expr(p, values)?;
         if expr_are_equals(&search, &p_result) {
-            return Ok(Rc::new(Expr::Boolean(true)));
+            return ok_result(Expr::Boolean(true));
         }
     }
-    return Ok(Rc::new(Expr::Boolean(false)));
+    return ok_result(Expr::Boolean(false));
 }
 
 // InLike
@@ -150,10 +152,10 @@ fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
         let p_result = exec_expr(p, values)?;
         todo!("SQL like");
         // if expr_like(&search, &p_result) {
-        //     return Ok(Rc::new(Expr::Boolean(true)));
+        //     return ok_result(Expr::Boolean(true));
         // }
     }
-    return Ok(Rc::new(Expr::Boolean(false)));
+    return ok_result(Expr::Boolean(false));
 }
 
 // FirstNotNull, FirstNotEmpty
@@ -165,5 +167,19 @@ fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
             _ => return Ok(p_result),
         }
     }
-    Ok(Rc::new(Expr::Null))
+    ok_result(Expr::Null)
+}
+
+/**********************************/
+/*          Strings               */
+/**********************************/
+
+// Concatenate, Concat
+fn f_concat(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    let mut result = String::new();
+    for p in params.iter() {
+        let s = expr_to_string(p, values)?;
+        result.push_str(&s[..]);
+    }
+    ok_result(Expr::Str(result))
 }
