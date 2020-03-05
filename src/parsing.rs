@@ -26,7 +26,16 @@ fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E
 
 /// string interior combinator
 fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    escaped(alphanumeric1, '\\', one_of("\\\"rnt"))(input)
+    alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
+    // alt((
+    //     map(double, Expr::Num),
+    //     map(null, |_| Expr::Null),
+    //     map(boolean, Expr::Boolean),
+    //     map_opt(string, |s| unescape(s).map(Expr::Str)),
+    //     map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
+    //     map(array, Expr::Array),
+    //     map(identifier_only, |s| Expr::Identifier(s.to_string())),
+    // ))
 }
 
 /// boolean combinator

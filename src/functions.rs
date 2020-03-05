@@ -99,6 +99,7 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("FirstNotEmpty".to_string(), Rc::new(f_first_not_null));
     funcs.insert("Concatenate".to_string(), Rc::new(f_concat));
     funcs.insert("Concat".to_string(), Rc::new(f_concat));
+    funcs.insert("Exact".to_string(), Rc::new(f_exact));
     funcs
 }
 
@@ -146,7 +147,7 @@ fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
 // InLike
 fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_min_params_count(params, 2, "In")?;
+    assert_min_params_count(params, 2, "InLike")?;
     let search = exec_expr(params.get(0).unwrap(), values)?;
     for p in params.iter().skip(1) {
         let p_result = exec_expr(p, values)?;
@@ -183,3 +184,19 @@ fn f_concat(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     }
     ok_result(Expr::Str(result))
 }
+
+// Exact
+fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Exact")?;
+    let left = expr_to_string(params.get(0).unwrap(), values)?;
+    let right = expr_to_string(params.get(1).unwrap(), values)?;
+    ok_result(Expr::Boolean(left == right))
+}
+// [ExpressionFunction(StringsCatName)]
+// public static Result Exact(object text1, object text2) => new Result(() =>
+//     {
+//         if (Result.IsObjError(text1)) return text1;
+//         if (Result.IsObjError(text2)) return text2;
+
+//         return string.Compare(ObjectToString(text1), ObjectToString(text2), StringComparison.Ordinal) == 0;
+//     });

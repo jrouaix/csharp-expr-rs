@@ -26,6 +26,7 @@ c# expression parser in Rust
 - [x] Handle `null` value (just in case)
 - [ ] Implement existing functions in BZP system & compare performances
 - [ ] Implement Sql Like function
+- [ ] Debug empty string parsing
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/

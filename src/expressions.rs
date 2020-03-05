@@ -1,4 +1,3 @@
-use crate::functions::*;
 use crate::parsing::*;
 
 use nom::error::ErrorKind;
@@ -164,6 +163,7 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<R
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use crate::functions::*;
     use test_case::test_case;
 
     macro_rules! rc_expr_str {
@@ -195,8 +195,15 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
+    #[test]
+    fn parse_empty_string() {
+        let expr = parse_expr("\"\"").unwrap();
+        assert_eq!(expr, Expr::Str("\"\"".to_string()))
+    }
+
     #[test_case(stringify!("null") => "null")]
     #[test_case(stringify!("test") => "test")]
+    #[test_case(stringify!("") => "")]
     #[test_case(stringify!("t") => "t")]
     #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
     #[test_case(stringify!("test\\slash") => "test\\slash")]
@@ -311,6 +318,8 @@ mod tests {
     #[test_case("In(42, 42, true, \"ok\")" => "true")]
     #[test_case("Concat(42, 42, true, \"ok\")" => "4242trueok")]
     #[test_case("Concatenate(null, \"42\", true, \"ok\", In(42, 3.14))" => "42trueokfalse")]
+    #[test_case("Exact(null, \"\")" => "true")] // to debug
+    #[test_case("Exact(null, Concat(null, null, null))" => "true")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())
