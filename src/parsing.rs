@@ -41,10 +41,7 @@ fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
 
 /// full string combinator
 fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context(
-        "string",
-        preceded(char('\"'), cut(terminated(parse_str, char('\"')))),
-    )(input)
+    context("string", preceded(char('\"'), cut(terminated(parse_str, char('\"')))))(input)
 }
 
 /// array combinator
@@ -54,9 +51,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcEx
         preceded(
             char('['),
             cut(terminated(
-                map(separated_list(preceded(sp, char(',')), value), |v| {
-                    v.into_iter().map(Rc::new).collect()
-                }),
+                map(separated_list(preceded(sp, char(',')), value), |v| v.into_iter().map(Rc::new).collect()),
                 preceded(sp, char(']')),
             )),
         ),
@@ -66,13 +61,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcEx
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     context(
         "identifier",
-        preceded(
-            opt(sp),
-            preceded(
-                opt(tag("@")),
-                recognize(tuple((opt(tag("_")), alphanumeric0))),
-            ),
-        ),
+        preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric0))))),
     )(input)
 }
 
@@ -83,9 +72,7 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
         preceded(
             char('('),
             terminated(
-                map(separated_list(preceded(sp, char(',')), value), |v| {
-                    v.into_iter().map(Rc::new).collect()
-                }),
+                map(separated_list(preceded(sp, char(',')), value), |v| v.into_iter().map(Rc::new).collect()),
                 // map_opt(opt(separated_list(preceded(opt(sp), char(',')), value)), |opt| opt),
                 preceded(opt(sp), char(')')),
             ),
@@ -93,9 +80,7 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
     )(input)
 }
 
-fn function_call<'a, E: ParseError<&'a str>>(
-    input: &'a str,
-) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
+fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
     pair(identifier, parameters)(input)
 }
 
@@ -112,9 +97,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
             map(null, |_| Expr::Null),
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),
-            map(function_call, |(f_name, params)| {
-                Expr::FunctionCall(String::from(f_name), params)
-            }),
+            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(array, Expr::Array),
             map(identifier_only, |s| Expr::Identifier(s.to_string())),
         )),

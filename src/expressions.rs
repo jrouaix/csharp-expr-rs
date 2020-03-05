@@ -1,3 +1,4 @@
+use crate::functions::*;
 use crate::parsing::*;
 
 use nom::error::ErrorKind;
@@ -15,12 +16,14 @@ pub type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 pub type IdentifierValueGetter = dyn Fn() -> String;
 pub type IdentifierValues = HashMap<String, Box<IdentifierValueGetter>>;
 
+pub type ExprDecimal = f64;
+
 #[repr(C)]
 #[derive(Clone)]
 pub enum Expr {
     Str(String),
     Boolean(bool),
-    Num(f64),
+    Num(ExprDecimal),
     Null,
     Array(VecRcExpr),
     Identifier(String),
@@ -46,9 +49,7 @@ impl fmt::Debug for Expr {
             Expr::Array(x) => write!(f, "Array({:?})", x),
             Expr::Identifier(x) => write!(f, "Identifier({:?})", x),
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
-            Expr::PreparedFunctionCall(s, x, _) => {
-                write!(f, "PreparedFunctionCall({:?},{:?})", s, x)
-            }
+            Expr::PreparedFunctionCall(s, x, _) => write!(f, "PreparedFunctionCall({:?},{:?})", s, x),
         }
     }
 }
@@ -62,12 +63,8 @@ impl cmp::PartialEq for Expr {
             (Expr::Null, Expr::Null) => true,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
-            (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => {
-                n_a == n_b && p_a == p_b
-            }
-            (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => {
-                n_a == n_b && p_a == p_b
-            }
+            (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
+            (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => n_a == n_b && p_a == p_b,
             _ => false,
         }
     }
@@ -84,6 +81,21 @@ impl ToString for Expr {
             Expr::Identifier(i) => format!("[{}]", i),
             Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
             Expr::PreparedFunctionCall(_, _, _) => "PreparedFunctionCall".to_string(),
+        }
+    }
+}
+
+impl Expr {
+    pub fn is_final(&self) -> bool {
+        match self {
+            Expr::Str(_) => true,
+            Expr::Boolean(b) => true,
+            Expr::Num(_) => true,
+            Expr::Null => true,
+            Expr::Array(_) => false,
+            Expr::Identifier(_) => false,
+            Expr::FunctionCall(_, _) => false,
+            Expr::PreparedFunctionCall(_, _, _) => false,
         }
     }
 }
@@ -105,22 +117,11 @@ pub fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList) -> Exp
     }
 }
 
-pub fn prepare_expr_list(
-    exprs: &SliceRcExpr,
-    funcs: &FunctionImplList,
-    identifiers: &mut HashSet<String>,
-) -> VecRcExpr {
-    exprs
-        .iter()
-        .map(|p| prepare_expr(p.clone(), funcs, identifiers))
-        .collect()
+pub fn prepare_expr_list(exprs: &SliceRcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> VecRcExpr {
+    exprs.iter().map(|p| prepare_expr(p.clone(), funcs, identifiers)).collect()
 }
 
-pub fn prepare_expr(
-    expr: RcExpr,
-    funcs: &FunctionImplList,
-    identifiers: &mut HashSet<String>,
-) -> RcExpr {
+pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> RcExpr {
     match expr.as_ref() {
         Expr::Identifier(name) => {
             identifiers.insert(name.clone());
@@ -145,9 +146,7 @@ pub fn prepare_expr(
         //         None => Rc::new(Expr::FunctionCall(name.clone(), parameters)),
         //     }
         // }
-        Expr::Array(elements) => {
-            Rc::new(Expr::Array(prepare_expr_list(elements, funcs, identifiers)))
-        }
+        Expr::Array(elements) => Rc::new(Expr::Array(prepare_expr_list(elements, funcs, identifiers))),
         _ => expr,
     }
 }
@@ -155,21 +154,16 @@ pub fn prepare_expr(
 pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<RcExpr, String> {
     match expr.as_ref() {
         Expr::Str(_) => Ok(expr.clone()),
-        Expr::Boolean(_) => Ok(expr.clone()),
-        Expr::Num(_) => Ok(expr.clone()),
+        Expr::Boolean(b) => Ok(Rc::new(Expr::Boolean(*b))),
+        Expr::Num(f) => Ok(Rc::new(Expr::Num(*f))),
         Expr::Null => Ok(Rc::new(Expr::Null)),
         Expr::Array(_) => Ok(expr.clone()),
         Expr::Identifier(name) => match &values.get(name) {
             Some(s) => Ok(Rc::new(Expr::Str(s()))),
-            None => Err(format!(
-                "Unable to find value for identifier named '{}'",
-                name
-            )),
+            None => Err(format!("Unable to find value for identifier named '{}'", name)),
         },
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
-        Expr::FunctionCall(name, _parameters) => {
-            Err(format!("Unable to find the function named '{}'", name))
-        }
+        Expr::FunctionCall(name, _parameters) => Err(format!("Unable to find the function named '{}'", name)),
         Expr::PreparedFunctionCall(_, parameters, fnc) => {
             let call_result = fnc(&parameters, &values)?;
             exec_expr(&call_result, values)
@@ -285,11 +279,7 @@ mod tests {
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs);
         println!("{:?}", expr);
-        let mut result = expr
-            .identifiers_names
-            .iter()
-            .cloned()
-            .collect::<Vec<String>>();
+        let mut result = expr.identifiers_names.iter().cloned().collect::<Vec<String>>();
         result.sort();
         result
     }
@@ -299,12 +289,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             "first".to_string(),
-            Rc::new(|v: &VecRcExpr, _: &IdentifierValues| {
-                v.first().map_or_else(
-                    || Err("There was no first value.".to_string()),
-                    |x| Ok(x.clone()),
-                )
-            }),
+            Rc::new(|v: &VecRcExpr, _: &IdentifierValues| v.first().map_or_else(|| Err("There was no first value.".to_string()), |x| Ok(x.clone()))),
         );
 
         funcs.insert(
@@ -325,11 +310,16 @@ mod tests {
         println!("{:?}", result);
     }
 
-    fn parse_exec_expr<'a>(
-        expression: &'a str,
-        funcs: &FunctionImplList,
-        values: &IdentifierValues,
-    ) -> String {
+    #[test_case(stringify!("test") => "test")]
+    #[test_case("IsNull(null)" => "true")]
+    #[test_case("IsNull(IsBlank(null))" => "false")]
+    #[test_case("AreEquals(IsBlank(null), IsNull(null))" => "true")]
+    fn execute_some_real_world_expression(expression: &str) -> String {
+        let funcs = get_functions();
+        parse_exec_expr(expression, &funcs, &IdentifierValues::new())
+    }
+
+    fn parse_exec_expr<'a>(expression: &'a str, funcs: &FunctionImplList, values: &IdentifierValues) -> String {
         let expr = parse_expr(expression).unwrap();
         let expr = prepare_expr_and_identifiers(expr, funcs);
         let result = exec_expr(&expr.expr, values).unwrap();

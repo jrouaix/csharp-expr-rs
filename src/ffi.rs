@@ -50,12 +50,7 @@ extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut Expr
 
     funcs.insert(
         "first".to_string(),
-        Rc::new(|v: &VecRcExpr, _: &IdentifierValues| {
-            v.first().map_or_else(
-                || Err("There was no first value.".to_string()),
-                |x| Ok(x.clone()),
-            )
-        }),
+        Rc::new(|v: &VecRcExpr, _: &IdentifierValues| v.first().map_or_else(|| Err("There was no first value.".to_string()), |x| Ok(x.clone()))),
     );
 
     let expr = prepare_expr_and_identifiers(expr, &funcs);
@@ -69,12 +64,7 @@ extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_char {
         &mut *ptr
     };
 
-    let identifiers_separated = expr
-        .identifiers_names
-        .iter()
-        .cloned()
-        .collect::<Vec<String>>()
-        .join("|");
+    let identifiers_separated = expr.identifiers_names.iter().cloned().collect::<Vec<String>>().join("|");
     let c_str_result = CString::new(identifiers_separated).unwrap();
     c_str_result.into_raw()
 }
@@ -94,11 +84,7 @@ pub struct FFICSharpString {
 }
 
 #[no_mangle]
-extern "C" fn ffi_exec_expr(
-    ptr: *mut ExprAndIdentifiers,
-    identifier_values: *const IdentifierKeyValue,
-    identifier_values_len: usize,
-) -> *mut c_char {
+extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *const IdentifierKeyValue, identifier_values_len: usize) -> *mut c_char {
     let expr = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
