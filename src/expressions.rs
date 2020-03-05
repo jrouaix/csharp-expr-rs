@@ -60,11 +60,11 @@ impl cmp::PartialEq for Expr {
             (Expr::Str(x_a), Expr::Str(x_b)) => x_a == x_b,
             (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
-            (Expr::Null, Expr::Null) => true,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
             (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => n_a == n_b && p_a == p_b,
+            (Expr::Null, Expr::Null) => true, // todo : should be false !? => implemented in the `f_are_equals` function
             _ => false,
         }
     }
@@ -314,6 +314,12 @@ mod tests {
     #[test_case("IsNull(null)" => "true")]
     #[test_case("IsNull(IsBlank(null))" => "false")]
     #[test_case("AreEquals(IsBlank(null), IsNull(null))" => "true")]
+    #[test_case("AreEquals(IsBlank(42), IsNull(null))" => "false")]
+    #[test_case("In(null, null)" => "false")]
+    #[test_case("In(true, false, 42, false)" => "false")]
+    #[test_case("In(true, 42, true, false)" => "true")]
+    #[test_case("In(\"ok\", 42, true, \"ok\")" => "true")]
+    #[test_case("In(42, 42, true, \"ok\")" => "true")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())
