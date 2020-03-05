@@ -135,17 +135,6 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
             )),
             None => expr,
         },
-        // Expr::FunctionCall(name, parameters) => {
-        //     let parameters = prepare_expr_list(parameters, funcs, identifiers);
-        //     match &funcs.get(name) {
-        //         Some(fnc) => Rc::new(Expr::PreparedFunctionCall(
-        //             name.clone(),
-        //             parameters,
-        //             Rc::clone(fnc),
-        //         )),
-        //         None => Rc::new(Expr::FunctionCall(name.clone(), parameters)),
-        //     }
-        // }
         Expr::Array(elements) => Rc::new(Expr::Array(prepare_expr_list(elements, funcs, identifiers))),
         _ => expr,
     }
