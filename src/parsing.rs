@@ -6,6 +6,7 @@ use nom::{
     character::complete::{alphanumeric0, alphanumeric1, char, one_of},
     combinator::{cut, map, map_opt, not, opt, recognize},
     error::{context, ParseError},
+    multi::many1,
     multi::separated_list,
     number::complete::double,
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -20,22 +21,16 @@ use unescape::unescape;
 
 /// spaces combinator
 fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    // many1(alt((tag("\t"), tag("\r"), tag("\n"), tag(" "))))(input)
     let chars = " \t\r\n";
     take_while(move |c| chars.contains(c))(input)
 }
 
 /// string interior combinator
-fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
-    // alt((
-    //     map(double, Expr::Num),
-    //     map(null, |_| Expr::Null),
-    //     map(boolean, Expr::Boolean),
-    //     map_opt(string, |s| unescape(s).map(Expr::Str)),
-    //     map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
-    //     map(array, Expr::Array),
-    //     map(identifier_only, |s| Expr::Identifier(s.to_string())),
-    // ))
+fn str_content<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    // alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
+    let white_spaces = alt((tag(" "), tag("\t")));
+    escaped(alt((alphanumeric1, white_spaces)), '\\', one_of("\\\"rnt"))(input)
 }
 
 /// boolean combinator
@@ -50,7 +45,7 @@ fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
 
 /// full string combinator
 fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("string", preceded(char('\"'), cut(terminated(parse_str, char('\"')))))(input)
+    context("string", preceded(char('\"'), cut(terminated(str_content, char('\"')))))(input)
 }
 
 /// array combinator
