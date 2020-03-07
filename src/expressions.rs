@@ -329,7 +329,15 @@ mod tests {
     #[test_case("Find(\"world\", \"helloworld\")" => "6")]
     #[test_case("Find(\"not found\", \"helloworld\")" => "0")]
     #[test_case("Find(\"world\", \"Hello world\")" => "7")]
+    #[test_case("Find(\"AAA\", \"AAA\")" => "1")]
+    #[test_case("Find(\" BBB\", \" BBB\")" => "1")]
+    #[test_case("Find(\"\\\"\", \"co\\\"co\")" => "3")]
+    #[test_case("Find(\"\\t\", \"bo\\tbo\")" => "3")]
     #[test_case("Find(\"AbcD\", \"aBCd\")" => "1")]
+    #[test_case("Find(\"C\", \"CCC\", 1)" => "1")]
+    #[test_case("Find(\"C\", \"CCC\", 0)" => "1")]
+    #[test_case("Find(\"C\", \"CCC\", 2)" => "2")]
+    #[test_case("Find(\"C\", \"CCC\", 3)" => "3")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

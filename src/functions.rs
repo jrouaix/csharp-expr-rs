@@ -199,42 +199,27 @@ fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "Find")?;
     assert_max_params_count(params, 3, "Find")?;
-    let start_num = match params.get(2) {
+    let start_num: usize = match params.get(2) {
         None => 0,
         Some(epxr) => {
-            todo!("expr to int"); // - 1
-                                  //if(i < 0) { 0 }
+            let s = expr_to_string(epxr, values)?;
+            let i: i32 = s.parse().map_err(|e| format!("{}", e))?;
+            (i - 1).max(0) as usize
         }
     };
 
     let find_text = expr_to_string(params.get(0).unwrap(), values)?;
-    // let find_text = regex::escape(&find_text[..]);
-    // let regex = regex::RegexBuilder::new(&find_text[..])
-    //     .case_insensitive(true)
-    //     .build()
-    //     .map_err(|e| format!("{}", e))?;
+    let find_text = regex::escape(&find_text[..]);
+    let regex = regex::RegexBuilder::new(&find_text[..])
+        .case_insensitive(true)
+        .build()
+        .map_err(|e| format!("{}", e))?;
 
     let within_text = expr_to_string(params.get(1).unwrap(), values)?;
-    let position = match within_text.find(&find_text[..]) {
-        None => 0,        // 0 for not found
-        Some(i) => i + 1, // because it's a Excel function and 1 based enumeration
+    println!("{}", find_text);
+    let position = match regex.find_at(&within_text[..], start_num) {
+        None => 0,                // 0 for not found
+        Some(m) => m.start() + 1, // because it's a Excel function and 1 based enumeration
     };
-
     ok_result(Expr::Num(position as ExprDecimal))
 }
-
-// [ExpressionFunction(StringsCatName)]
-// public static Result Find(object findText, object withinText, int startNum = 1) => new Result(() =>
-//     {
-//         var startIndex = startNum - 1;
-//         if (startIndex < 0)
-//         {
-//             startIndex = 0; // just in case
-//         }
-
-//         if (Result.IsObjError(findText)) return findText;
-//         if (Result.IsObjError(withinText)) return withinText;
-
-//         var foundIndex = ObjectToString(withinText).IndexOf(ObjectToString(findText), startIndex, StringComparison.OrdinalIgnoreCase);
-//         return foundIndex + 1;
-//     });
