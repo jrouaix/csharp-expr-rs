@@ -11,18 +11,18 @@ fn error_result(error: String) -> ExprFuncResult {
     Err(error)
 }
 
-fn is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String> {
+fn exec_vec_is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String> {
     let len = params.len();
     if len == 0 {
         return Ok(true);
     }
     if len == 1 {
-        return expr_is_null(params.get(0).unwrap(), values);
+        return exec_expr_is_null(params.get(0).unwrap(), values);
     }
     Err("is_null only takes 0 or 1 parameter".to_string())
 }
 
-fn expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
+fn exec_expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
     let res = exec_expr(expr, values)?;
     Ok(if let Expr::Null = *res { true } else { false })
 }
@@ -39,7 +39,7 @@ fn expr_are_equals(left: &Expr, right: &Expr) -> bool {
     left == right
 }
 
-fn expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<String, String> {
+fn exec_expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<String, String> {
     let res = exec_expr(expr, values)?;
     if res.is_final() {
         Ok(res.to_string())
@@ -48,12 +48,12 @@ fn expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<String, St
     }
 }
 
-fn expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator: Option<char>) -> Result<ExprDecimal, String> {
+fn exec_expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator: Option<char>) -> Result<ExprDecimal, String> {
     let res = exec_expr(expr, values)?;
     if let Expr::Num(n) = *res {
         Ok(n)
     } else {
-        let mut s = expr_to_string(expr, values)?;
+        let mut s = exec_expr_to_string(expr, values)?;
         if let Some(c) = decimal_separator {
             s = s.replace(c, ".")
         }
@@ -62,7 +62,7 @@ fn expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator: Opti
     }
 }
 
-fn expr_to_int(expr: &RcExpr, values: &IdentifierValues) -> Result<isize, String> {
+fn exec_expr_to_int(expr: &RcExpr, values: &IdentifierValues) -> Result<isize, String> {
     let res = exec_expr(expr, values)?;
     match &*res {
         Expr::Num(n) => Ok(*n as isize),
@@ -71,7 +71,7 @@ fn expr_to_int(expr: &RcExpr, values: &IdentifierValues) -> Result<isize, String
     }
 }
 
-fn expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
+fn exec_expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
     let res = exec_expr(expr, values)?;
     match &*res {
         Expr::Boolean(b) => Ok(*b),
@@ -117,6 +117,8 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Exact".to_string(), Rc::new(f_exact));
     funcs.insert("Find".to_string(), Rc::new(f_find));
     funcs.insert("Fixed".to_string(), Rc::new(f_fixed));
+    funcs.insert("Left".to_string(), Rc::new(f_left));
+    funcs.insert("Right".to_string(), Rc::new(f_right));
     funcs
 }
 
@@ -136,7 +138,7 @@ pub fn get_functions() -> FunctionImplList {
 
 // IsNull, IsBlank
 fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    let res = is_null(params, values)?;
+    let res = exec_vec_is_null(params, values)?;
     ok_result(Expr::Boolean(res))
 }
 
@@ -196,7 +198,7 @@ fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 fn f_concat(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let mut result = String::new();
     for p in params.iter() {
-        let s = expr_to_string(p, values)?;
+        let s = exec_expr_to_string(p, values)?;
         result.push_str(&s[..]);
     }
     ok_result(Expr::Str(result))
@@ -205,8 +207,8 @@ fn f_concat(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 // Exact
 fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Exact")?;
-    let left = expr_to_string(params.get(0).unwrap(), values)?;
-    let right = expr_to_string(params.get(1).unwrap(), values)?;
+    let left = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let right = exec_expr_to_string(params.get(1).unwrap(), values)?;
     ok_result(Expr::Boolean(left == right))
 }
 
@@ -216,17 +218,17 @@ fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_max_params_count(params, 3, "Find")?;
     let start_num: usize = match params.get(2) {
         None => 0,
-        Some(epxr) => (expr_to_int(epxr, values)? - 1).max(0) as usize,
+        Some(epxr) => (exec_expr_to_int(epxr, values)? - 1).max(0) as usize,
     };
 
-    let find_text = expr_to_string(params.get(0).unwrap(), values)?;
+    let find_text = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let find_text = regex::escape(&find_text[..]);
     let regex = RegexBuilder::new(&find_text[..])
         .case_insensitive(true)
         .build()
         .map_err(|e| format!("{}", e))?;
 
-    let within_text = expr_to_string(params.get(1).unwrap(), values)?;
+    let within_text = exec_expr_to_string(params.get(1).unwrap(), values)?;
     println!("{}", find_text);
     let position = match regex.find_at(&within_text[..], start_num) {
         None => 0,                // 0 for not found
@@ -240,15 +242,15 @@ fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 1, "Fixed")?;
     assert_max_params_count(params, 3, "Fixed")?;
 
-    let number = expr_to_num(params.get(0).unwrap(), values, None)?;
+    let number = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
 
     let decimals = match params.get(1) {
         None => 2,
-        Some(epxr) => expr_to_int(epxr, values)?.max(0) as usize,
+        Some(epxr) => exec_expr_to_int(epxr, values)?.max(0) as usize,
     };
     let no_commas = match params.get(2) {
         None => true,
-        Some(epxr) => expr_to_bool(epxr, values)?,
+        Some(epxr) => exec_expr_to_bool(epxr, values)?,
     };
 
     let result = if no_commas {
@@ -264,4 +266,32 @@ fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
         result
     };
     ok_result(Expr::Str(result))
+}
+
+// Left
+fn f_left(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Left")?;
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let size = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as usize;
+    if size == 0 {
+        ok_result(Expr::Str("".to_string()))
+    } else if size >= s.len() {
+        ok_result(Expr::Str(s))
+    } else {
+        ok_result(Expr::Str(format!("{}", &s[..size])))
+    }
+}
+
+// Right
+fn f_right(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Right")?;
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let size = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as usize;
+    if size == 0 {
+        ok_result(Expr::Str("".to_string()))
+    } else if size >= s.len() {
+        ok_result(Expr::Str(s))
+    } else {
+        ok_result(Expr::Str(format!("{}", &s[s.len() - size..])))
+    }
 }

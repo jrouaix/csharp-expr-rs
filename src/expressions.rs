@@ -348,6 +348,12 @@ mod tests {
     #[test_case("Fixed(31416, 0, false)" => "31,416")]
     #[test_case("Fixed(31415926.5359, 3, false)" => "31,415,926.536")]
     #[test_case("Fixed(0.42, 3, false)" => "0.420")]
+    #[test_case("Left(\"Left\", 2)" => "Le")]
+    #[test_case("Left(\"Left\", -2)" => "")]
+    #[test_case("Left(\"Left\", 42)" => "Left")]
+    #[test_case("Right(\"Right\", 3)" => "ght")]
+    #[test_case("Right(\"Right\", -2)" => "")]
+    #[test_case("Right(\"Right\", 42)" => "Right")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

@@ -41,17 +41,7 @@ extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut Expr
     let r_str = str_from_c_char_ptr(expression);
     let expr = parse_expr(r_str).unwrap();
 
-    let mut funcs: FunctionImplList = HashMap::new();
-
-    funcs.insert(
-        "true".to_string(),
-        Rc::new(|_: &VecRcExpr, _: &IdentifierValues| Ok(Rc::new(Expr::Boolean(true)))),
-    );
-
-    funcs.insert(
-        "first".to_string(),
-        Rc::new(|v: &VecRcExpr, _: &IdentifierValues| v.first().map_or_else(|| Err("There was no first value.".to_string()), |x| Ok(x.clone()))),
-    );
+    let funcs = crate::functions::get_functions();
 
     let expr = prepare_expr_and_identifiers(expr, &funcs);
     Box::into_raw(Box::new(expr))
