@@ -36,7 +36,7 @@ c# expression parser in Rust
 - [ ] Modularisation, so anyone can implement their own functions list
 - [ ] Case insensitive function names
 - [ ] Handle Assoc/Binary operators
-- [ ] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate)
+- [ ] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate : https://crates.io/crates/rust_decimal ?)
 - [ ] Publish on crates.io
 
 

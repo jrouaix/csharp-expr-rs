@@ -14,7 +14,8 @@ unescape = "0.1.0"
 encoding_rs = "0.8.22"
 once_cell = "1.3.1"
 regex = "1"
-num-format = "0.4.0" # https://crates.io/crates/num-format
+num-format = "0.4.0" # when floating point formating will be here : https://github.com/bcmyers/num-format/issues/1
+# https://crates.io/crates/rust_decimal
 
 [dev-dependencies]
 test-case = "1.0.0"

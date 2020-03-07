@@ -1,4 +1,5 @@
 use crate::parsing::*;
+use std::fmt::Display;
 
 use nom::error::ErrorKind;
 use std::cmp;
@@ -69,17 +70,17 @@ impl cmp::PartialEq for Expr {
     }
 }
 
-impl ToString for Expr {
-    fn to_string(&self) -> String {
+impl Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Str(s) => s.to_string(),
-            Expr::Boolean(b) => b.to_string(),
-            Expr::Num(n) => n.to_string(),
-            Expr::Null => "".to_string(),
-            Expr::Array(_) => "Array".to_string(),
-            Expr::Identifier(i) => format!("[{}]", i),
-            Expr::FunctionCall(_, _) => "FunctionCall".to_string(),
-            Expr::PreparedFunctionCall(_, _, _) => "PreparedFunctionCall".to_string(),
+            Expr::Str(s) => write!(f, "{}", s),
+            Expr::Boolean(b) => write!(f, "{}", b),
+            Expr::Num(n) => write!(f, "{}", n),
+            Expr::Null => write!(f, ""),
+            Expr::Array(_) => write!(f, "Array"),
+            Expr::Identifier(i) => write!(f, "[{}]", i),
+            Expr::FunctionCall(_, _) => write!(f, "FunctionCall"),
+            Expr::PreparedFunctionCall(_, _, _) => write!(f, "PreparedFunctionCall"),
         }
     }
 }
@@ -338,6 +339,15 @@ mod tests {
     #[test_case("Find(\"C\", \"CCC\", 0)" => "1")]
     #[test_case("Find(\"C\", \"CCC\", 2)" => "2")]
     #[test_case("Find(\"C\", \"CCC\", 3)" => "3")]
+    #[test_case("Fixed(2)" => "2.00")]
+    #[test_case("Fixed(2, 2)" => "2.00")]
+    #[test_case("Fixed(3.1416, 2)" => "3.14")]
+    #[test_case("Fixed(3.1416, 3)" => "3.142")]
+    #[test_case("Fixed(3.1416, 5)" => "3.14160")]
+    #[test_case("Fixed(31416, 0, true)" => "31416")]
+    #[test_case("Fixed(31416, 0, false)" => "31,416")]
+    #[test_case("Fixed(31415926.5359, 3, false)" => "31,415,926.536")]
+    #[test_case("Fixed(0.42, 3, false)" => "0.420")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

@@ -1,5 +1,6 @@
 use crate::expressions::*;
-use regex::Regex;
+use num_format::{Locale, ToFormattedString};
+use regex::RegexBuilder;
 use std::rc::Rc;
 
 fn ok_result(expr: Expr) -> ExprFuncResult {
@@ -23,11 +24,7 @@ fn is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String
 
 fn expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
     let res = exec_expr(expr, values)?;
-    if let Expr::Null = *res {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    Ok(if let Expr::Null = *res { true } else { false })
 }
 
 fn expr_are_equals(left: &Expr, right: &Expr) -> bool {
@@ -60,8 +57,25 @@ fn expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator: Opti
         if let Some(c) = decimal_separator {
             s = s.replace(c, ".")
         }
-        let n: ExprDecimal = s.parse().or_else(|_| Err(format!("Can't parse value {} to decimal", s)))?;
+        let n: ExprDecimal = s.parse().or_else(|_| Err(format!("'{}' is not a number", s)))?;
         Ok(n)
+    }
+}
+
+fn expr_to_int(expr: &RcExpr, values: &IdentifierValues) -> Result<isize, String> {
+    let res = exec_expr(expr, values)?;
+    match &*res {
+        Expr::Num(n) => Ok(*n as isize),
+        Expr::Str(s) => Ok(s.parse::<isize>().or_else(|_| Err(format!("'{}' is not a number", s)))?),
+        expr => Err(format!("'{}' is not a number", expr)),
+    }
+}
+
+fn expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
+    let res = exec_expr(expr, values)?;
+    match &*res {
+        Expr::Boolean(b) => Ok(*b),
+        expr => Err(format!("'{}' is not a boolean", expr)),
     }
 }
 
@@ -102,6 +116,7 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Concat".to_string(), Rc::new(f_concat));
     funcs.insert("Exact".to_string(), Rc::new(f_exact));
     funcs.insert("Find".to_string(), Rc::new(f_find));
+    funcs.insert("Fixed".to_string(), Rc::new(f_fixed));
     funcs
 }
 
@@ -201,16 +216,12 @@ fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_max_params_count(params, 3, "Find")?;
     let start_num: usize = match params.get(2) {
         None => 0,
-        Some(epxr) => {
-            let s = expr_to_string(epxr, values)?;
-            let i: i32 = s.parse().map_err(|e| format!("{}", e))?;
-            (i - 1).max(0) as usize
-        }
+        Some(epxr) => (expr_to_int(epxr, values)? - 1).max(0) as usize,
     };
 
     let find_text = expr_to_string(params.get(0).unwrap(), values)?;
     let find_text = regex::escape(&find_text[..]);
-    let regex = regex::RegexBuilder::new(&find_text[..])
+    let regex = RegexBuilder::new(&find_text[..])
         .case_insensitive(true)
         .build()
         .map_err(|e| format!("{}", e))?;
@@ -222,4 +233,35 @@ fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
         Some(m) => m.start() + 1, // because it's a Excel function and 1 based enumeration
     };
     ok_result(Expr::Num(position as ExprDecimal))
+}
+
+// Fixed
+fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_min_params_count(params, 1, "Fixed")?;
+    assert_max_params_count(params, 3, "Fixed")?;
+
+    let number = expr_to_num(params.get(0).unwrap(), values, None)?;
+
+    let decimals = match params.get(1) {
+        None => 2,
+        Some(epxr) => expr_to_int(epxr, values)?.max(0) as usize,
+    };
+    let no_commas = match params.get(2) {
+        None => true,
+        Some(epxr) => expr_to_bool(epxr, values)?,
+    };
+
+    let result = if no_commas {
+        format!("{num:.prec$}", num = number, prec = decimals)
+    } else {
+        let int = (number.trunc() as isize).to_formatted_string(&Locale::en);
+        let fract = format!("{num:.prec$}", num = number.fract(), prec = decimals);
+        let fract: Vec<&str> = fract.split(".").collect();
+        let result = match fract.get(1) {
+            Some(s) => format!("{}.{}", int, s),
+            None => int,
+        };
+        result
+    };
+    ok_result(Expr::Str(result))
 }
