@@ -1,6 +1,6 @@
 use crate::expressions::*;
 use num_format::{Locale, ToFormattedString};
-use regex::RegexBuilder;
+use regex::{Regex, RegexBuilder};
 use std::rc::Rc;
 
 fn ok_result(expr: Expr) -> ExprFuncResult {
@@ -116,6 +116,7 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Concat".to_string(), Rc::new(f_concat));
     funcs.insert("Exact".to_string(), Rc::new(f_exact));
     funcs.insert("Find".to_string(), Rc::new(f_find));
+    funcs.insert("Substitute".to_string(), Rc::new(f_substitute));
     funcs.insert("Fixed".to_string(), Rc::new(f_fixed));
     funcs.insert("Left".to_string(), Rc::new(f_left));
     funcs.insert("Right".to_string(), Rc::new(f_right));
@@ -127,6 +128,8 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("FirstSentence".to_string(), Rc::new(f_first_sentence));
     funcs.insert("Capitalize".to_string(), Rc::new(f_capitalize));
     funcs.insert("Split".to_string(), Rc::new(f_split));
+    funcs.insert("NumberValue".to_string(), Rc::new(f_number_value));
+    funcs.insert("Text".to_string(), Rc::new(f_text));
     funcs
 }
 
@@ -207,7 +210,7 @@ fn f_concat(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let mut result = String::new();
     for p in params.iter() {
         let s = exec_expr_to_string(p, values)?;
-        result.push_str(&s[..]);
+        result.push_str(&s);
     }
     ok_result(Expr::Str(result))
 }
@@ -220,6 +223,15 @@ fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     ok_result(Expr::Boolean(left == right))
 }
 
+fn make_case_insensitive_search_regex(search_pattern: &str) -> Result<Regex, String> {
+    let search_pattern = regex::escape(&search_pattern);
+    let regex = RegexBuilder::new(&search_pattern)
+        .case_insensitive(true)
+        .build()
+        .map_err(|e| format!("{}", e))?;
+    Ok(regex)
+}
+
 // Find
 fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "Find")?;
@@ -230,19 +242,29 @@ fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     };
 
     let find_text = exec_expr_to_string(params.get(0).unwrap(), values)?;
-    let find_text = regex::escape(&find_text[..]);
-    let regex = RegexBuilder::new(&find_text[..])
-        .case_insensitive(true)
-        .build()
-        .map_err(|e| format!("{}", e))?;
+    let regex = make_case_insensitive_search_regex(&find_text)?;
 
     let within_text = exec_expr_to_string(params.get(1).unwrap(), values)?;
     println!("{}", find_text);
-    let position = match regex.find_at(&within_text[..], start_num) {
+    let position = match regex.find_at(&within_text, start_num) {
         None => 0,                // 0 for not found
         Some(m) => m.start() + 1, // because it's a Excel function and 1 based enumeration
     };
     ok_result(Expr::Num(position as ExprDecimal))
+}
+
+// Substitute
+fn f_substitute(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 3, "Substitute")?;
+
+    let within_text = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let find_text = exec_expr_to_string(params.get(1).unwrap(), values)?;
+    let replace_text = exec_expr_to_string(params.get(2).unwrap(), values)?;
+
+    let regex = make_case_insensitive_search_regex(&find_text)?;
+    let replaced = regex.replace_all(&within_text, move |_c: &regex::Captures| replace_text.clone());
+
+    ok_result(Expr::Str(replaced.into()))
 }
 
 // Fixed
@@ -363,6 +385,11 @@ fn f_first_word(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     })
 }
 
+// Text
+fn f_text(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Text", |s| ok_result(Expr::Str(s)))
+}
+
 // FirstSentence
 fn f_first_sentence(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "FirstSentence", |s| {
@@ -387,10 +414,22 @@ fn f_split(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let separator = exec_expr_to_string(params.get(1).unwrap(), values)?;
     let index = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
-    let parts: Vec<&str> = s.split(&separator[..]).collect();
+    let parts: Vec<&str> = s.split(&separator).collect();
     let result = match parts.get(index) {
         None => Expr::Null,
         Some(p) => Expr::Str(p.to_string()),
     };
     ok_result(result)
+}
+
+// NumberValue
+fn f_number_value(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_min_params_count(params, 1, "NumberValue")?;
+    assert_max_params_count(params, 2, "NumberValue")?;
+    let separator = match params.get(1) {
+        None => None,
+        Some(expr) => exec_expr_to_string(expr, values)?.chars().next(),
+    };
+    let number = exec_expr_to_num(params.get(0).unwrap(), values, separator)?;
+    ok_result(Expr::Num(number))
 }

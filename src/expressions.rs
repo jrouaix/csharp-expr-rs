@@ -349,6 +349,10 @@ mod tests {
     #[test_case("Find(\"C\", \"CCC\", 0)" => "1")]
     #[test_case("Find(\"C\", \"CCC\", 2)" => "2")]
     #[test_case("Find(\"C\", \"CCC\", 3)" => "3")]
+    #[test_case("Substitute(\"abcEFG\", \"aBC\", \"A\")" => "AEFG")]
+    #[test_case("Substitute(\"abcEFG\", \"CCC\", 3)" => "abcEFG")]
+    #[test_case("Substitute(\"abababa\", \"a\", null)" => "bbb")]
+    #[test_case("Substitute(\"abababa\", \"a\", \"0O\")" => "0Ob0Ob0Ob0O")]
     #[test_case("Fixed(2)" => "2.00")]
     #[test_case("Fixed(2, 2)" => "2.00")]
     #[test_case("Fixed(3.1416, 2)" => "3.14")]
@@ -379,8 +383,14 @@ mod tests {
     #[test_case("Mid(\"abcdefghij\", -2, 3)" => "abc")]
     #[test_case("Mid(\"abcdefghij\", 0, 0)" => "")]
     #[test_case("Mid(\"abcdefghij\", 4, 42)" => "defghij")]
-    #[test_case("Mid(\"abcdefghij\", 4, 7)" => "defghij")]
+    #[test_case("Mid(\"abcdefghij\", 4, \"7\")" => "defghij")]
     #[test_case("Mid(\"abcdefghij\", -42, 42)" => "abcdefghij")]
+    #[test_case("Mid(\"abcdefghij\", \"1\", 10)" => "abcdefghij")]
+    #[test_case("Concat(Mid(Left(\"abcdefghij\", 3), \"2\", 1), NumberValue(\"3\"))" => "b3")]
+    #[test_case("NumberValue(\"2\")" => "2")]
+    #[test_case("NumberValue(\"2.3\")" => "2.3")]
+    #[test_case("NumberValue(\"2z4\", \"z.\")" => "2.4")]
+    #[test_case("Text(\"toto\")" => "toto")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

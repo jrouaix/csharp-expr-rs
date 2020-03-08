@@ -26,6 +26,7 @@ c# expression parser in Rust
 - [x] Handle `null` value (just in case)
 - [x] Debug ` ` white space and tabs in strings are still strings 
 - [ ] Implement existing functions in BZP system & compare performances
+- [ ] Debug strings should be able to contain any character !
 - [ ] Implement Sql Like function
 - [ ] Debug empty string parsing
 - [ ] Debug Identifiers (Some tests are not passing)
