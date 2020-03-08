@@ -130,6 +130,7 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Split".to_string(), Rc::new(f_split));
     funcs.insert("NumberValue".to_string(), Rc::new(f_number_value));
     funcs.insert("Text".to_string(), Rc::new(f_text));
+    funcs.insert("StartWith".to_string(), Rc::new(f_start_with));
     funcs
 }
 
@@ -433,3 +434,32 @@ fn f_number_value(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResu
     let number = exec_expr_to_num(params.get(0).unwrap(), values, separator)?;
     ok_result(Expr::Num(number))
 }
+
+// StartsWith
+fn f_start_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "StartsWith")?;
+    let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
+
+    let mut t_iter = text.chars().into_iter();
+    let mut s_iter = search.chars().into_iter();
+
+    loop {
+        let t = t_iter.next();
+        let s = s_iter.next();
+        println!("{:?} {:?}", t, s);
+        match (s, t) {
+            (None, None) => return ok_result(Expr::Boolean(true)),
+            (None, Some(_)) => return ok_result(Expr::Boolean(true)),
+            (Some(_), None) => return ok_result(Expr::Boolean(false)),
+            (Some(vs), Some(vt)) => {
+                if !vs.to_lowercase().eq(vt.to_lowercase()) {
+                    return ok_result(Expr::Boolean(false));
+                }
+            }
+        }
+    }
+    unreachable!();
+}
+
+// todo :EndsWith, Trim

@@ -89,7 +89,7 @@ impl Expr {
     pub fn is_final(&self) -> bool {
         match self {
             Expr::Str(_) => true,
-            Expr::Boolean(b) => true,
+            Expr::Boolean(_) => true,
             Expr::Num(_) => true,
             Expr::Null => true,
             Expr::Array(_) => false,
@@ -391,6 +391,12 @@ mod tests {
     #[test_case("NumberValue(\"2.3\")" => "2.3")]
     #[test_case("NumberValue(\"2z4\", \"z.\")" => "2.4")]
     #[test_case("Text(\"toto\")" => "toto")]
+    #[test_case("StartWith(\"toto\", \"t\")" => "true")]
+    #[test_case("StartWith(null, \"t\")" => "false")]
+    #[test_case("StartWith(\"toto\", null)" => "true")]
+    #[test_case("StartWith(\"toto\", \"tota\")" => "false")]
+    #[test_case("StartWith(\"toto\", \"totoa\")" => "false")]
+    #[test_case("StartWith(\"abc\", \"aBC\")" => "true")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())
