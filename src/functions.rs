@@ -124,13 +124,15 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Len".to_string(), Rc::new(f_len));
     funcs.insert("Lower".to_string(), Rc::new(f_lower));
     funcs.insert("Upper".to_string(), Rc::new(f_upper));
+    funcs.insert("Trim".to_string(), Rc::new(f_trim));
     funcs.insert("FirstWord".to_string(), Rc::new(f_first_word));
     funcs.insert("FirstSentence".to_string(), Rc::new(f_first_sentence));
     funcs.insert("Capitalize".to_string(), Rc::new(f_capitalize));
     funcs.insert("Split".to_string(), Rc::new(f_split));
     funcs.insert("NumberValue".to_string(), Rc::new(f_number_value));
     funcs.insert("Text".to_string(), Rc::new(f_text));
-    funcs.insert("StartWith".to_string(), Rc::new(f_start_with));
+    funcs.insert("StartsWith".to_string(), Rc::new(f_starts_with));
+    funcs.insert("EndsWith".to_string(), Rc::new(f_ends_with));
     funcs
 }
 
@@ -365,6 +367,11 @@ fn f_upper(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "Upper", |s| ok_result(Expr::Str(s.to_uppercase())))
 }
 
+// Trim
+fn f_trim(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Trim", |s| ok_result(Expr::Str(s.trim().to_string())))
+}
+
 fn is_punctuation(c: char) -> bool {
     c == '.' || c == ',' || c == '!' || c == '?' || c == '¿'
 }
@@ -436,7 +443,7 @@ fn f_number_value(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResu
 }
 
 // StartsWith
-fn f_start_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_starts_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "StartsWith")?;
     let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
@@ -462,4 +469,29 @@ fn f_start_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     unreachable!();
 }
 
-// todo :EndsWith, Trim
+// EndsWith
+fn f_ends_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "EndsWith")?;
+    let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
+
+    let mut t_iter = text.chars().rev().into_iter();
+    let mut s_iter = search.chars().rev().into_iter();
+
+    loop {
+        let t = t_iter.next();
+        let s = s_iter.next();
+        println!("{:?} {:?}", t, s);
+        match (s, t) {
+            (None, None) => return ok_result(Expr::Boolean(true)),
+            (None, Some(_)) => return ok_result(Expr::Boolean(true)),
+            (Some(_), None) => return ok_result(Expr::Boolean(false)),
+            (Some(vs), Some(vt)) => {
+                if !vs.to_lowercase().eq(vt.to_lowercase()) {
+                    return ok_result(Expr::Boolean(false));
+                }
+            }
+        }
+    }
+    unreachable!();
+}
