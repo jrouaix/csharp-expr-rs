@@ -202,6 +202,16 @@ mod tests {
                               // assert_eq!(expr, Expr::Str("\"\"".to_string()))
     }
 
+    #[test]
+    fn parse_string_with_doublequote() -> Result<(), String> {
+        let expression = "\" \\\" \"";
+        let expected = " \" ";
+        let result = parse_expr(expression)?;
+        println!("'{}' => '{}'", expression, result.to_string());
+        assert_eq!(result, Expr::Str(expected.to_string()));
+        Ok(())
+    }
+
     #[test_case(stringify!("null") => "null")]
     #[test_case(stringify!("test") => "test")]
     #[test_case(stringify!("t") => "t")]
@@ -353,7 +363,14 @@ mod tests {
     #[test_case("Left(\"Left\", 42)" => "Left")]
     #[test_case("Right(\"Right\", 3)" => "ght")]
     #[test_case("Right(\"Right\", -2)" => "")]
-    #[test_case("Right(\"Right\", 42)" => "Right")]
+    #[test_case("FirstWord(\"once\")" => "once")]
+    #[test_case("FirstWord(\"once upon\")" => "once")]
+    #[test_case("FirstWord(\"a!time\")" => "a")]
+    #[test_case("FirstWord(\"w.at\")" => "w")]
+    #[test_case("FirstWord(\"you\tou\")" => "you")]
+    #[test_case("FirstSentence(\"once upon. a time\")" => "once upon")]
+    #[test_case("Split(\"a,b,c,d,e\", \",\", 0)" => "a")]
+    #[test_case("Split(\"azbzczdze\", \"z\", 0)" => "a")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

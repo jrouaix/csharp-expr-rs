@@ -2,8 +2,8 @@ use crate::expressions::*;
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, tag, take_while}, // escaped_transform
-    character::complete::{alphanumeric0, alphanumeric1, char, one_of},
+    bytes::complete::{escaped, is_a, is_not, tag, take_while}, // escaped_transform
+    character::complete::{alphanumeric0, alphanumeric1, anychar, char, one_of},
     combinator::{cut, map, map_opt, not, opt, recognize},
     error::{context, ParseError},
     multi::many1,
@@ -19,18 +19,36 @@ use unescape::unescape;
 /// `Input -> IResult<Input, Output, Error>`, with `IResult` defined as:
 /// `type IResult<I, O, E = (I, ErrorKind)> = Result<(I, O), Err<E>>;`
 
+fn not_space(s: &str) -> IResult<&str, &str> {
+    is_not(" \t\r\n")(s)
+}
+
 /// spaces combinator
 fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    // many1(alt((tag("\t"), tag("\r"), tag("\n"), tag(" "))))(input)
-    let chars = " \t\r\n";
-    take_while(move |c| chars.contains(c))(input)
+    // is_a(" \t\r\n")(input) // not working
+    take_while(|c| " \t\r\n".contains(c))(input)
 }
 
 /// string interior combinator
 fn str_content<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     // alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
+    // WORKING
     let white_spaces = alt((tag(" "), tag("\t")));
-    escaped(alt((alphanumeric1, white_spaces)), '\\', one_of("\\\"rnt"))(input)
+    let punctuation = alt((tag("."), tag(","), tag("!"), tag("?"), tag("¿")));
+    // let white_spaces = is_a("&é'(-è_çà@^`|([{~}])");
+    escaped(alt((alphanumeric1, white_spaces, punctuation)), '\\', one_of("\\\"rnt"))(input)
+
+    // TRY 1
+    // escaped(anychar, '\\', one_of("\\\"rnt"))(input)
+    // TRY 2
+    // escaped(take_while(|c| c != '"'), '\\', one_of("\\\"rnt"))(input)
+    // TRY 3
+    // escaped(not(char('"')), '\\', one_of("\\\"rnt"))(input)
+}
+
+/// full string combinator
+fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    context("string", preceded(char('\"'), cut(terminated(str_content, char('\"')))))(input)
 }
 
 /// boolean combinator
@@ -41,11 +59,6 @@ fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool,
 /// null combinator
 fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
     map(tag("null"), |_| ())(input)
-}
-
-/// full string combinator
-fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("string", preceded(char('\"'), cut(terminated(str_content, char('\"')))))(input)
 }
 
 /// array combinator

@@ -119,6 +119,13 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Fixed".to_string(), Rc::new(f_fixed));
     funcs.insert("Left".to_string(), Rc::new(f_left));
     funcs.insert("Right".to_string(), Rc::new(f_right));
+    funcs.insert("Len".to_string(), Rc::new(f_len));
+    funcs.insert("Lower".to_string(), Rc::new(f_lower));
+    funcs.insert("Upper".to_string(), Rc::new(f_upper));
+    funcs.insert("FirstWord".to_string(), Rc::new(f_first_word));
+    funcs.insert("FirstSentence".to_string(), Rc::new(f_first_sentence));
+    funcs.insert("Capitalize".to_string(), Rc::new(f_capitalize));
+    funcs.insert("Split".to_string(), Rc::new(f_split));
     funcs
 }
 
@@ -294,4 +301,78 @@ fn f_right(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     } else {
         ok_result(Expr::Str(format!("{}", &s[s.len() - size..])))
     }
+}
+
+fn single_string_func<F: FnOnce(String) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, f_name)?;
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    func(s)
+}
+
+// Len
+fn f_len(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Len", |s| ok_result(Expr::Num(s.len() as ExprDecimal)))
+}
+
+// Lower
+fn f_lower(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Lower", |s| ok_result(Expr::Str(s.to_lowercase())))
+}
+
+// Upper
+fn f_upper(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Upper", |s| ok_result(Expr::Str(s.to_uppercase())))
+}
+
+fn is_punctuation(c: char) -> bool {
+    c == '.' || c == ',' || c == '!' || c == '?' || c == '¿'
+}
+fn is_space(c: char) -> bool {
+    c == ' ' || c == '\t' || c == '\r' || c == '\n'
+}
+fn is_sentence_punctuation(c: char) -> bool {
+    c == '.' || c == '!' || c == '?'
+}
+
+// FirstWord
+fn f_first_word(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "FirstWord", |s| {
+        let position = s.chars().position(|c| is_space(c) || is_punctuation(c));
+        match position {
+            None => ok_result(Expr::Str(s)),
+            Some(i) => ok_result(Expr::Str(format!("{}", &s[..i]))),
+        }
+    })
+}
+
+// FirstSentence
+fn f_first_sentence(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "FirstSentence", |s| {
+        let position = s.chars().position(|c| is_sentence_punctuation(c));
+        match position {
+            None => ok_result(Expr::Str(s)),
+            Some(i) => ok_result(Expr::Str(format!("{}", &s[..i]))),
+        }
+    })
+}
+
+// Capitalize
+fn f_capitalize(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Capitalize", |s| {
+        todo!();
+    })
+}
+
+// Split
+fn f_split(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 3, "Split")?;
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let separator = exec_expr_to_string(params.get(1).unwrap(), values)?;
+    let index = exec_expr_to_int(params.get(2).unwrap(), values)?.min(0) as usize;
+    let parts: Vec<&str> = s.split(&separator[..]).collect();
+    let result = match parts.get(index) {
+        None => Expr::Null,
+        Some(p) => Expr::Str(p.to_string()),
+    };
+    ok_result(result)
 }
