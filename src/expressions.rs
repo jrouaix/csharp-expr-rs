@@ -371,6 +371,16 @@ mod tests {
     #[test_case("FirstSentence(\"once upon. a time\")" => "once upon")]
     #[test_case("Split(\"a,b,c,d,e\", \",\", 0)" => "a")]
     #[test_case("Split(\"azbzczdze\", \"z\", 0)" => "a")]
+    #[test_case("Split(\"a,b,c,d,e\", \",\", 2)" => "c")]
+    #[test_case("Split(\"a,b,c,d,e\", \",\", 42)" => "")]
+    #[test_case("Mid(\"abcdefghij\", 1, 2)" => "ab")]
+    #[test_case("Mid(\"abcdefghij\", 2, 2)" => "bc")]
+    #[test_case("Mid(\"abcdefghij\", 2, 3)" => "bcd")]
+    #[test_case("Mid(\"abcdefghij\", -2, 3)" => "abc")]
+    #[test_case("Mid(\"abcdefghij\", 0, 0)" => "")]
+    #[test_case("Mid(\"abcdefghij\", 4, 42)" => "defghij")]
+    #[test_case("Mid(\"abcdefghij\", 4, 7)" => "defghij")]
+    #[test_case("Mid(\"abcdefghij\", -42, 42)" => "abcdefghij")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

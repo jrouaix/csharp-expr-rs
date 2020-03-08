@@ -119,6 +119,7 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Fixed".to_string(), Rc::new(f_fixed));
     funcs.insert("Left".to_string(), Rc::new(f_left));
     funcs.insert("Right".to_string(), Rc::new(f_right));
+    funcs.insert("Mid".to_string(), Rc::new(f_mid));
     funcs.insert("Len".to_string(), Rc::new(f_len));
     funcs.insert("Lower".to_string(), Rc::new(f_lower));
     funcs.insert("Upper".to_string(), Rc::new(f_upper));
@@ -303,6 +304,23 @@ fn f_right(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     }
 }
 
+// Mid
+fn f_mid(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 3, "Mid")?;
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let false_position = exec_expr_to_int(params.get(1).unwrap(), values)?.max(1).min(s.len() as isize);
+    let position = (false_position - 1) as usize;
+    let size = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
+    if size == 0 {
+        ok_result(Expr::Str("".to_string()))
+    } else if position == 0 && size >= s.len() {
+        ok_result(Expr::Str(s))
+    } else {
+        let end = (position + size).min(s.len());
+        ok_result(Expr::Str(format!("{}", &s[position..end])))
+    }
+}
+
 fn single_string_func<F: FnOnce(String) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 1, f_name)?;
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
@@ -368,7 +386,7 @@ fn f_split(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 3, "Split")?;
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let separator = exec_expr_to_string(params.get(1).unwrap(), values)?;
-    let index = exec_expr_to_int(params.get(2).unwrap(), values)?.min(0) as usize;
+    let index = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
     let parts: Vec<&str> = s.split(&separator[..]).collect();
     let result = match parts.get(index) {
         None => Expr::Null,
