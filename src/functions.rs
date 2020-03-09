@@ -68,10 +68,16 @@ fn exec_expr_to_int(expr: &RcExpr, values: &IdentifierValues) -> Result<isize, S
 }
 
 fn exec_expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
+    lazy_static! {
+        static ref TRUE_STRING: Regex = RegexBuilder::new("^\\s*(true|1)\\s*$").case_insensitive(true).build().unwrap();
+    }
+
     let res = exec_expr(expr, values)?;
     match &*res {
         Expr::Boolean(b) => Ok(*b),
-        expr => Err(format!("'{}' is not a boolean", expr)),
+        Expr::Num(n) => Ok(*n == 1 as ExprDecimal),
+        Expr::Str(s) => Ok(TRUE_STRING.is_match(&*s)),
+        _ => Err(format!("'{}' is not a boolean", expr)),
     }
 }
 
@@ -99,81 +105,27 @@ fn assert_min_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Re
     }
 }
 
-pub fn get_functions() -> FunctionImplList {
-    let mut funcs = FunctionImplList::new();
-    funcs.insert("IsNull".to_string(), Rc::new(f_is_null));
-    funcs.insert("IsBlank".to_string(), Rc::new(f_is_null));
-    funcs.insert("AreEquals".to_string(), Rc::new(f_are_equals));
-    funcs.insert("In".to_string(), Rc::new(f_in));
-    funcs.insert("InLike".to_string(), Rc::new(f_in_like));
-    funcs.insert("IsLike".to_string(), Rc::new(f_is_like));
-    funcs.insert("Like".to_string(), Rc::new(f_is_like));
-    funcs.insert("FirstNotNull".to_string(), Rc::new(f_first_not_null));
-    funcs.insert("FirstNotEmpty".to_string(), Rc::new(f_first_not_null));
-    funcs.insert("Concatenate".to_string(), Rc::new(f_concat));
-    funcs.insert("Concat".to_string(), Rc::new(f_concat));
-    funcs.insert("Exact".to_string(), Rc::new(f_exact));
-    funcs.insert("Find".to_string(), Rc::new(f_find));
-    funcs.insert("Substitute".to_string(), Rc::new(f_substitute));
-    funcs.insert("Fixed".to_string(), Rc::new(f_fixed));
-    funcs.insert("Left".to_string(), Rc::new(f_left));
-    funcs.insert("Right".to_string(), Rc::new(f_right));
-    funcs.insert("Mid".to_string(), Rc::new(f_mid));
-    funcs.insert("Len".to_string(), Rc::new(f_len));
-    funcs.insert("Lower".to_string(), Rc::new(f_lower));
-    funcs.insert("Upper".to_string(), Rc::new(f_upper));
-    funcs.insert("Trim".to_string(), Rc::new(f_trim));
-    funcs.insert("FirstWord".to_string(), Rc::new(f_first_word));
-    funcs.insert("FirstSentence".to_string(), Rc::new(f_first_sentence));
-    funcs.insert("Capitalize".to_string(), Rc::new(f_capitalize));
-    funcs.insert("Split".to_string(), Rc::new(f_split));
-    funcs.insert("NumberValue".to_string(), Rc::new(f_number_value));
-    funcs.insert("Text".to_string(), Rc::new(f_text));
-    funcs.insert("StartsWith".to_string(), Rc::new(f_starts_with));
-    funcs.insert("EndsWith".to_string(), Rc::new(f_ends_with));
-    funcs
-}
-
-// #region Category names
-
-// private const string MiscCatName = "Misc";
-// private const string StringsCatName = "Strings";
-// private const string LogicalCatName = "Logical";
-// private const string MathCatName = "Math";
-// private const string DateCatName = "DateTime";
-
-// #endregion
-
 /**********************************/
-/*          Miscellaneous         */
+/*          Regex helpers         */
 /**********************************/
 
-// IsNull, IsBlank
-fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    let res = exec_vec_is_null(params, values)?;
-    ok_result(Expr::Boolean(res))
+fn make_case_insensitive_search_regex(search_pattern: &str) -> Result<Regex, String> {
+    let search_pattern = regex::escape(&search_pattern);
+    let regex = RegexBuilder::new(&search_pattern)
+        .case_insensitive(true)
+        .build()
+        .map_err(|e| format!("{}", e))?;
+    Ok(regex)
 }
 
-// AreEquals
-fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_exact_params_count(params, 2, "AreEquals")?;
-    let left = exec_expr(params.get(0).unwrap(), values)?;
-    let right = exec_expr(params.get(1).unwrap(), values)?;
-    let res = expr_are_equals(&left, &right);
-    ok_result(Expr::Boolean(res))
-}
-
-// In
-fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_min_params_count(params, 2, "In")?;
-    let search = exec_expr(params.get(0).unwrap(), values)?;
-    for p in params.iter().skip(1) {
-        let p_result = exec_expr(p, values)?;
-        if expr_are_equals(&search, &p_result) {
-            return ok_result(Expr::Boolean(true));
-        }
-    }
-    return ok_result(Expr::Boolean(false));
+fn make_case_insensitive_equals_regex(search_pattern: &str) -> Result<Regex, String> {
+    let search_pattern = regex::escape(&search_pattern);
+    let search_pattern = format!("^{}$", search_pattern);
+    let regex = RegexBuilder::new(&search_pattern)
+        .case_insensitive(true)
+        .build()
+        .map_err(|e| format!("{}", e))?;
+    Ok(regex)
 }
 
 #[cfg(test)]
@@ -261,6 +213,95 @@ fn make_case_insensitive_like_regex(search_pattern: &str) -> Result<Regex, Strin
     Ok(regex)
 }
 
+/**********************************/
+/*          Functions list        */
+/**********************************/
+
+pub fn get_functions() -> FunctionImplList {
+    let mut funcs = FunctionImplList::new();
+    funcs.insert("IsNull".to_string(), Rc::new(f_is_null));
+    funcs.insert("IsBlank".to_string(), Rc::new(f_is_null));
+    funcs.insert("AreEquals".to_string(), Rc::new(f_are_equals));
+    funcs.insert("In".to_string(), Rc::new(f_in));
+    funcs.insert("InLike".to_string(), Rc::new(f_in_like));
+    funcs.insert("IsLike".to_string(), Rc::new(f_is_like));
+    funcs.insert("Like".to_string(), Rc::new(f_is_like));
+    funcs.insert("FirstNotNull".to_string(), Rc::new(f_first_not_null));
+    funcs.insert("FirstNotEmpty".to_string(), Rc::new(f_first_not_null));
+    funcs.insert("Concatenate".to_string(), Rc::new(f_concat));
+    funcs.insert("Concat".to_string(), Rc::new(f_concat));
+    funcs.insert("Exact".to_string(), Rc::new(f_exact));
+    funcs.insert("Find".to_string(), Rc::new(f_find));
+    funcs.insert("Substitute".to_string(), Rc::new(f_substitute));
+    funcs.insert("Fixed".to_string(), Rc::new(f_fixed));
+    funcs.insert("Left".to_string(), Rc::new(f_left));
+    funcs.insert("Right".to_string(), Rc::new(f_right));
+    funcs.insert("Mid".to_string(), Rc::new(f_mid));
+    funcs.insert("Len".to_string(), Rc::new(f_len));
+    funcs.insert("Lower".to_string(), Rc::new(f_lower));
+    funcs.insert("Upper".to_string(), Rc::new(f_upper));
+    funcs.insert("Trim".to_string(), Rc::new(f_trim));
+    funcs.insert("FirstWord".to_string(), Rc::new(f_first_word));
+    funcs.insert("FirstSentence".to_string(), Rc::new(f_first_sentence));
+    funcs.insert("Capitalize".to_string(), Rc::new(f_capitalize));
+    funcs.insert("Split".to_string(), Rc::new(f_split));
+    funcs.insert("NumberValue".to_string(), Rc::new(f_number_value));
+    funcs.insert("Text".to_string(), Rc::new(f_text));
+    funcs.insert("StartsWith".to_string(), Rc::new(f_starts_with));
+    funcs.insert("EndsWith".to_string(), Rc::new(f_ends_with));
+    funcs.insert("ReplaceEquals".to_string(), Rc::new(f_replace_equals));
+    funcs.insert("ReplaceLike".to_string(), Rc::new(f_replace_like));
+    funcs.insert("And".to_string(), Rc::new(f_and));
+    funcs.insert("Or".to_string(), Rc::new(f_or));
+    funcs.insert("Not".to_string(), Rc::new(f_not));
+    funcs.insert("Xor".to_string(), Rc::new(f_xor));
+    funcs.insert("Iif".to_string(), Rc::new(f_iif));
+    funcs.insert("If".to_string(), Rc::new(f_iif));
+    funcs
+}
+
+// #region Category names
+
+// private const string MiscCatName = "Misc";
+// private const string StringsCatName = "Strings";
+// private const string LogicalCatName = "Logical";
+// private const string MathCatName = "Math";
+// private const string DateCatName = "DateTime";
+
+// #endregion
+
+/**********************************/
+/*          Miscellaneous         */
+/**********************************/
+
+// IsNull, IsBlank
+fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    let res = exec_vec_is_null(params, values)?;
+    ok_result(Expr::Boolean(res))
+}
+
+// AreEquals
+fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "AreEquals")?;
+    let left = exec_expr(params.get(0).unwrap(), values)?;
+    let right = exec_expr(params.get(1).unwrap(), values)?;
+    let res = expr_are_equals(&left, &right);
+    ok_result(Expr::Boolean(res))
+}
+
+// In
+fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_min_params_count(params, 2, "In")?;
+    let search = exec_expr(params.get(0).unwrap(), values)?;
+    for p in params.iter().skip(1) {
+        let p_result = exec_expr(p, values)?;
+        if expr_are_equals(&search, &p_result) {
+            return ok_result(Expr::Boolean(true));
+        }
+    }
+    return ok_result(Expr::Boolean(false));
+}
+
 // InLike
 fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "InLike")?;
@@ -315,15 +356,6 @@ fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let left = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let right = exec_expr_to_string(params.get(1).unwrap(), values)?;
     ok_result(Expr::Boolean(left == right))
-}
-
-fn make_case_insensitive_search_regex(search_pattern: &str) -> Result<Regex, String> {
-    let search_pattern = regex::escape(&search_pattern);
-    let regex = RegexBuilder::new(&search_pattern)
-        .case_insensitive(true)
-        .build()
-        .map_err(|e| format!("{}", e))?;
-    Ok(regex)
 }
 
 // Find
@@ -586,3 +618,110 @@ fn f_ends_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult 
     }
     unreachable!();
 }
+
+// ReplaceEquals
+fn f_replace_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_min_params_count(params, 4, "ReplaceEquals")?;
+    if params.len() % 2 == 1 {
+        return Err("Remplacement key/value parameters must come 2 by 2".to_string());
+    }
+
+    let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let mut p_iter = params.iter().skip(2);
+    loop {
+        match (p_iter.next(), p_iter.next()) {
+            (Some(pattern_expr), Some(replacement_expr)) => {
+                let pattern = exec_expr_to_string(pattern_expr, values)?;
+                let regex = make_case_insensitive_equals_regex(&pattern)?;
+
+                if regex.is_match(&text) {
+                    let replacement = exec_expr(replacement_expr, values);
+                    return replacement;
+                }
+            }
+            _ => break,
+        }
+    }
+
+    let default = exec_expr(params.get(1).unwrap(), values);
+    default
+}
+
+// ReplaceLike
+fn f_replace_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_min_params_count(params, 4, "ReplaceLike")?;
+    if params.len() % 2 == 1 {
+        return Err("Remplacement key/value parameters must come 2 by 2".to_string());
+    }
+
+    let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let mut p_iter = params.iter().skip(2);
+    loop {
+        match (p_iter.next(), p_iter.next()) {
+            (Some(pattern_expr), Some(replacement_expr)) => {
+                let pattern = exec_expr_to_string(pattern_expr, values)?;
+                let regex = make_case_insensitive_like_regex(&pattern)?;
+
+                if regex.is_match(&text) {
+                    let replacement = exec_expr(replacement_expr, values);
+                    return replacement;
+                }
+            }
+            _ => break,
+        }
+    }
+
+    let default = exec_expr(params.get(1).unwrap(), values);
+    default
+}
+
+/**********************************/
+/*          Logical               */
+/**********************************/
+
+// And
+fn f_and(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    for expr in params {
+        let b = exec_expr_to_bool(expr, values)?;
+        if !b {
+            return ok_result(Expr::Boolean(false));
+        }
+    }
+    ok_result(Expr::Boolean(true))
+}
+
+// Or
+fn f_or(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    for expr in params {
+        let b = exec_expr_to_bool(expr, values)?;
+        if b {
+            return ok_result(Expr::Boolean(true));
+        }
+    }
+    ok_result(Expr::Boolean(false))
+}
+
+// Not
+fn f_not(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, "Not")?;
+    ok_result(Expr::Boolean(!exec_expr_to_bool(params.get(0).unwrap(), values)?))
+}
+
+// Xor
+fn f_xor(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Xor")?;
+    let p0 = exec_expr_to_bool(params.get(0).unwrap(), values)?;
+    let p1 = exec_expr_to_bool(params.get(1).unwrap(), values)?;
+    ok_result(Expr::Boolean(p0 ^ p1))
+}
+
+// Iif, If
+fn f_iif(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 3, "Iif")?;
+    let test = exec_expr_to_bool(params.get(0).unwrap(), values)?;
+    exec_expr(params.get(if test { 1 } else { 2 }).unwrap(), values)
+}
+
+/**********************************/
+/*          Math                  */
+/**********************************/

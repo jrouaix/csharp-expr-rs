@@ -427,6 +427,8 @@ mod tests {
     #[test_case("EndsWith(\"toto\", \"aoto\")" => "false")]
     #[test_case("EndsWith(\"toto\", \"atoto\")" => "false")]
     #[test_case("EndsWith(\"abc\", \"aBC\")" => "true")]
+    #[test_case("ReplaceEquals(\"aBc\", null, \"aaa\", NumberValue(\"WILL_BREAK_IF_EXEC\"), \"abc\", 42, \"abc\", NumberValue(\"WILL_BREAK_IF_EXEC\"))" => "42")]
+    #[test_case("ReplaceLike(\"aBc\", null, \"aaa\", NumberValue(\"WILL_BREAK_IF_EXEC\"), \"%c\", 42, \"abc\", NumberValue(\"WILL_BREAK_IF_EXEC\"))" => "42")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())
