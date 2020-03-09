@@ -7,10 +7,6 @@ fn ok_result(expr: Expr) -> ExprFuncResult {
     Ok(Rc::new(expr))
 }
 
-fn error_result(error: String) -> ExprFuncResult {
-    Err(error)
-}
-
 fn exec_vec_is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String> {
     let len = params.len();
     if len == 0 {
@@ -202,6 +198,9 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
     let mut result = String::new();
     result.push('^');
 
+    const ANY_MANY: &str = ".*";
+    const ANY_ONE: &str = ".{1}";
+
     let mut previous_char = Option::<char>::default();
     for c in like_pattern.chars() {
         match (previous_char, c) {
@@ -217,14 +216,14 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
                 previous_char = None;
             }
             (Some('%'), _) => {
-                result.push_str(".*");
+                result.push_str(ANY_MANY);
                 if c != '%' && c != '_' {
                     result.push(c);
                 }
                 previous_char = Some(c);
             }
             (Some('_'), _) => {
-                result.push_str(".{1}");
+                result.push_str(ANY_ONE);
                 if c != '%' && c != '_' {
                     result.push(c);
                 }
@@ -243,8 +242,8 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
 
     match previous_char {
         None => {}
-        Some('%') => result.push_str(".*"),
-        Some('_') => result.push_str(".{1}"),
+        Some('%') => result.push_str(ANY_MANY),
+        Some('_') => result.push_str(ANY_ONE),
         _ => {}
     }
 
@@ -255,7 +254,7 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
 fn make_case_insensitive_like_regex(search_pattern: &str) -> Result<Regex, String> {
     let search_pattern = regex::escape(&search_pattern);
     let regex_pattern = like_pattern_to_regex_pattern(&search_pattern);
-    let regex = RegexBuilder::new(&search_pattern)
+    let regex = RegexBuilder::new(&regex_pattern)
         .case_insensitive(true)
         .build()
         .map_err(|e| format!("{}", e))?;
@@ -265,14 +264,15 @@ fn make_case_insensitive_like_regex(search_pattern: &str) -> Result<Regex, Strin
 // InLike
 fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "InLike")?;
-    let search = exec_expr(params.get(0).unwrap(), values)?;
+    let search = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let regex = make_case_insensitive_like_regex(&search)?;
     for p in params.iter().skip(1) {
-        let p_result = exec_expr(p, values)?;
-        // if expr_like(&search, &p_result) {
-        //     return ok_result(Expr::Boolean(true));
-        // }
+        let text = exec_expr_to_string(p, values)?;
+        if regex.is_match(&text) {
+            return ok_result(Expr::Boolean(true));
+        }
     }
-    return ok_result(Expr::Boolean(false));
+    ok_result(Expr::Boolean(false))
 }
 
 // IsLike, Like
@@ -281,20 +281,9 @@ fn f_is_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
     let regex = make_case_insensitive_like_regex(&search)?;
-    // println!("{} {} {}", text, search, regex);
-    return ok_result(Expr::Boolean(regex.is_match(&text)));
+    ok_result(Expr::Boolean(regex.is_match(&text)))
 }
 
-// [ExpressionFunction(StringsCatName, "Like")]
-// public static Result IsLike(object text, object sqlLikeExpression) => new Result(() =>
-// {
-//     if (Result.IsObjError(text)) return text;
-//     if (Result.IsObjError(sqlLikeExpression)) return sqlLikeExpression;
-
-//     return ObjectIsLikeResult(text, sqlLikeExpression);
-// });
-
-// FirstNotNull, FirstNotEmpty
 fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for p in params.iter() {
         let p_result = exec_expr(p, values)?;
