@@ -110,6 +110,8 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("AreEquals".to_string(), Rc::new(f_are_equals));
     funcs.insert("In".to_string(), Rc::new(f_in));
     funcs.insert("InLike".to_string(), Rc::new(f_in_like));
+    funcs.insert("IsLike".to_string(), Rc::new(f_is_like));
+    funcs.insert("Like".to_string(), Rc::new(f_is_like));
     funcs.insert("FirstNotNull".to_string(), Rc::new(f_first_not_null));
     funcs.insert("FirstNotEmpty".to_string(), Rc::new(f_first_not_null));
     funcs.insert("Concatenate".to_string(), Rc::new(f_concat));
@@ -178,19 +180,119 @@ fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     return ok_result(Expr::Boolean(false));
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+    #[test_case("abcd" => "^abcd$")]
+    #[test_case("a_cd" => "^a.{1}cd$")]
+    #[test_case("ab%d" => "^ab.*d$")]
+    #[test_case("ab%%cd" => "^ab%cd$")]
+    #[test_case("_abc" => "^.{1}abc$")]
+    #[test_case("%abc" => "^.*abc$")]
+    #[test_case("def_" => "^def.{1}$")]
+    #[test_case("def%" => "^def.*$")]
+    #[test_case("_O__%%___%%%O%" => "^.{1}O_%_.{1}%.*O.*$")]
+    fn test_like_pattern_to_regex_pattern(like_pattern: &str) -> String {
+        like_pattern_to_regex_pattern(like_pattern)
+    }
+}
+
+fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
+    let mut result = String::new();
+    result.push('^');
+
+    let mut previous_char = Option::<char>::default();
+    for c in like_pattern.chars() {
+        match (previous_char, c) {
+            (None, '%') | (None, '_') => {
+                previous_char = Some(c);
+            }
+            (None, _) => {
+                result.push(c);
+                previous_char = Some(c);
+            }
+            (Some('%'), '%') | (Some('_'), '_') => {
+                result.push(c);
+                previous_char = None;
+            }
+            (Some('%'), _) => {
+                result.push_str(".*");
+                if c != '%' && c != '_' {
+                    result.push(c);
+                }
+                previous_char = Some(c);
+            }
+            (Some('_'), _) => {
+                result.push_str(".{1}");
+                if c != '%' && c != '_' {
+                    result.push(c);
+                }
+                previous_char = Some(c);
+            }
+            (Some(_), '%') | (Some(_), '_') => {
+                previous_char = Some(c);
+            }
+            (Some(_), _) => {
+                result.push(c);
+                previous_char = Some(c);
+            }
+        }
+        // println!("{} {} => {}", c, previous_char.unwrap_or(' '), result);
+    }
+
+    match previous_char {
+        None => {}
+        Some('%') => result.push_str(".*"),
+        Some('_') => result.push_str(".{1}"),
+        _ => {}
+    }
+
+    result.push('$');
+    result
+}
+
+fn make_case_insensitive_like_regex(search_pattern: &str) -> Result<Regex, String> {
+    let search_pattern = regex::escape(&search_pattern);
+    let regex_pattern = like_pattern_to_regex_pattern(&search_pattern);
+    let regex = RegexBuilder::new(&search_pattern)
+        .case_insensitive(true)
+        .build()
+        .map_err(|e| format!("{}", e))?;
+    Ok(regex)
+}
+
 // InLike
 fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "InLike")?;
     let search = exec_expr(params.get(0).unwrap(), values)?;
     for p in params.iter().skip(1) {
         let p_result = exec_expr(p, values)?;
-        todo!("SQL like");
         // if expr_like(&search, &p_result) {
         //     return ok_result(Expr::Boolean(true));
         // }
     }
     return ok_result(Expr::Boolean(false));
 }
+
+// IsLike, Like
+fn f_is_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "IsLike")?;
+    let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
+    let regex = make_case_insensitive_like_regex(&search)?;
+    // println!("{} {} {}", text, search, regex);
+    return ok_result(Expr::Boolean(regex.is_match(&text)));
+}
+
+// [ExpressionFunction(StringsCatName, "Like")]
+// public static Result IsLike(object text, object sqlLikeExpression) => new Result(() =>
+// {
+//     if (Result.IsObjError(text)) return text;
+//     if (Result.IsObjError(sqlLikeExpression)) return sqlLikeExpression;
+
+//     return ObjectIsLikeResult(text, sqlLikeExpression);
+// });
 
 // FirstNotNull, FirstNotEmpty
 fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
