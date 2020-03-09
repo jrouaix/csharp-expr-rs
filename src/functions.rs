@@ -257,6 +257,23 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Xor".to_string(), Rc::new(f_xor));
     funcs.insert("Iif".to_string(), Rc::new(f_iif));
     funcs.insert("If".to_string(), Rc::new(f_iif));
+    funcs.insert("Abs".to_string(), Rc::new(f_abs));
+    funcs.insert("Product".to_string(), Rc::new(f_product));
+    funcs.insert("Sum".to_string(), Rc::new(f_sum));
+    funcs.insert("Divide".to_string(), Rc::new(f_divide));
+    funcs.insert("Subtract".to_string(), Rc::new(f_subtract));
+    funcs.insert("Mod".to_string(), Rc::new(f_mod));
+    funcs.insert("Modulo".to_string(), Rc::new(f_mod));
+    funcs.insert("Round".to_string(), Rc::new(f_round));
+    funcs.insert("GreaterThan".to_string(), Rc::new(f_greater_than));
+    funcs.insert("Gt".to_string(), Rc::new(f_greater_than));
+    funcs.insert("LowerThan".to_string(), Rc::new(f_lower_than));
+    funcs.insert("Lt".to_string(), Rc::new(f_lower_than));
+    funcs.insert("GreaterThanOrEqual".to_string(), Rc::new(f_greater_than_or_equal));
+    funcs.insert("Gtoe".to_string(), Rc::new(f_greater_than_or_equal));
+    funcs.insert("LowerThanOrEqual".to_string(), Rc::new(f_lower_than_or_equal));
+    funcs.insert("Ltoe".to_string(), Rc::new(f_lower_than_or_equal));
+
     funcs
 }
 
@@ -725,3 +742,104 @@ fn f_iif(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 /**********************************/
 /*          Math                  */
 /**********************************/
+
+// Abs
+fn f_abs(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, "Abs")?;
+    let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
+    ok_result(Expr::Num(num.abs()))
+}
+
+// Product
+fn f_product(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    let mut result = 1 as ExprDecimal;
+    for expr in params.iter() {
+        let i = exec_expr_to_num(expr, values, None)?;
+        let intermediate_result = result;
+        result = std::panic::catch_unwind(|| intermediate_result * i)
+            .map_err(|_| format!("Couldn't multiply {} by {} : overflow", result, i).to_string())?;
+    }
+    ok_result(Expr::Num(result))
+}
+
+// Sum
+fn f_sum(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    let mut result = 1 as ExprDecimal;
+    for expr in params.iter() {
+        let i = exec_expr_to_num(expr, values, None)?;
+        let intermediate_result = result;
+        result =
+            std::panic::catch_unwind(|| intermediate_result + i).map_err(|_| format!("Couldn't add {} to {} : overflow", i, result).to_string())?;
+    }
+    ok_result(Expr::Num(result))
+}
+
+// Divide
+fn f_divide(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Divide")?;
+    let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
+    let divisor = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
+    let result = std::panic::catch_unwind(|| num / divisor).map_err(|_| format!("Couldn't divide {} by {}", num, divisor).to_string())?;
+    ok_result(Expr::Num(result))
+}
+
+// Subtract
+fn f_subtract(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Subtract")?;
+    let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
+    let sub = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
+    let result = std::panic::catch_unwind(|| num - sub).map_err(|_| format!("Couldn't remove {} from {}", sub, num).to_string())?;
+    ok_result(Expr::Num(result))
+}
+
+// Mod, Modulo
+fn f_mod(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Mod")?;
+    let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
+    let divisor = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
+    let result = std::panic::catch_unwind(|| num % divisor).map_err(|_| format!("Couldn't module {} by {}", num, divisor).to_string())?;
+    ok_result(Expr::Num(result))
+}
+
+// Round
+fn f_round(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "Round")?;
+    let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
+    let digits = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as u32;
+    let mult_div = (10 as u32).pow(digits) as ExprDecimal;
+    let result = std::panic::catch_unwind(|| (num * mult_div).round() / mult_div)
+        .map_err(|_| format!("Couldn't round {} to {} digits", num, digits).to_string())?;
+    ok_result(Expr::Num(result))
+}
+
+fn simple_operator<F: FnOnce(ExprDecimal, ExprDecimal) -> ExprFuncResult>(
+    params: &VecRcExpr,
+    values: &IdentifierValues,
+    f_name: &str,
+    func: F,
+) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, f_name)?;
+    let num_a = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
+    let num_b = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
+    func(num_a, num_b)
+}
+
+// GreaterThan, Gt
+fn f_greater_than(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    simple_operator(params, values, "GreaterThan", |a, b| ok_result(Expr::Boolean(a > b)))
+}
+
+// LowerThan, Lt
+fn f_lower_than(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    simple_operator(params, values, "LowerThan", |a, b| ok_result(Expr::Boolean(a < b)))
+}
+
+// GreaterThanOrEqual, Gtoe
+fn f_greater_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    simple_operator(params, values, "GreaterThanOrEqual", |a, b| ok_result(Expr::Boolean(a >= b)))
+}
+
+// LowerThanOrEqual, Ltoe
+fn f_lower_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    simple_operator(params, values, "LowerThanOrEqual", |a, b| ok_result(Expr::Boolean(a <= b)))
+}
