@@ -71,7 +71,6 @@ fn exec_expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, S
     lazy_static! {
         static ref TRUE_STRING: Regex = RegexBuilder::new("^\\s*(true|1)\\s*$").case_insensitive(true).build().unwrap();
     }
-
     let res = exec_expr(expr, values)?;
     match &*res {
         Expr::Boolean(b) => Ok(*b),
@@ -764,7 +763,7 @@ fn f_product(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
 // Sum
 fn f_sum(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    let mut result = 1 as ExprDecimal;
+    let mut result = 0 as ExprDecimal;
     for expr in params.iter() {
         let i = exec_expr_to_num(expr, values, None)?;
         let intermediate_result = result;
