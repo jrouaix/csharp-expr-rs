@@ -1,4 +1,5 @@
 use crate::expressions::*;
+use chrono::{prelude::*, Duration};
 use num_format::{Locale, ToFormattedString};
 use regex::{Regex, RegexBuilder};
 use std::rc::Rc;
@@ -35,13 +36,17 @@ fn expr_are_equals(left: &Expr, right: &Expr) -> bool {
     left == right
 }
 
-fn exec_expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<String, String> {
-    let res = exec_expr(expr, values)?;
-    if res.is_final() {
-        Ok(res.to_string())
+fn expr_to_string(expr: &Expr) -> Result<String, String> {
+    if expr.is_final() {
+        Ok(expr.to_string())
     } else {
         Err("Can't change this expression to string".to_string())
     }
+}
+
+fn exec_expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<String, String> {
+    let res = exec_expr(expr, values)?;
+    expr_to_string(&res)
 }
 
 fn exec_expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator: Option<char>) -> Result<ExprDecimal, String> {
@@ -79,6 +84,91 @@ fn exec_expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, S
         _ => Err(format!("'{}' is not a boolean", expr)),
     }
 }
+
+fn exec_expr_to_date_no_defaults(expr: &RcExpr, values: &IdentifierValues) -> Result<DateTime<Utc>, String> {
+    exec_expr_to_date(expr, values, false, false, false, false, false, false)
+}
+
+fn exec_expr_to_date(
+    expr: &RcExpr,
+    values: &IdentifierValues,
+    default_year: bool,
+    default_month: bool,
+    default_day: bool,
+    default_hour: bool,
+    default_minute: bool,
+    default_second: bool,
+) -> Result<DateTime<Utc>, String> {
+    let res = exec_expr(expr, values)?;
+    let mut date_time = match &*res {
+        Expr::Date(d) => *d,
+        e => {
+            let text = expr_to_string(&e)?;
+            text.parse::<DateTime<Utc>>().map_err(|e| format!("{}", e))?
+        }
+    };
+
+    if default_year {
+        date_time = date_time.with_year(1).unwrap();
+    }
+    if default_month {
+        date_time = date_time.with_month(1).unwrap();
+    }
+    if default_day {
+        date_time = date_time.with_day(1).unwrap();
+    }
+    if default_hour {
+        date_time = date_time.with_hour(1).unwrap();
+    }
+    if default_minute {
+        date_time = date_time.with_minute(1).unwrap();
+    }
+    if default_second {
+        date_time = date_time.with_second(1).unwrap();
+    }
+    Ok(date_time)
+}
+
+/*
+
+/// <summary>
+   /// return the date from value
+   /// </summary>
+   private static Result ObjectToDateResult(
+       object text,
+       bool defaultYear = false,
+       bool defaultMonth = false,
+       bool defaultDay = false,
+       bool defaultHour = false,
+       bool defaultMinute = false,
+       bool defaultSecond = false)
+   {
+       return new Result(() =>
+       {
+           if (Result.IsObjError(text)) return text;
+           if (text is DateTime) return text;
+
+           var stringValue = ObjectToString(text);
+
+           DateTime date;
+           if (DateTime.TryParse(stringValue, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out date))
+           {
+               date = new DateTime(
+               defaultYear ? 1 : date.Year,
+               defaultMonth ? 1 : date.Month,
+               defaultDay ? 1 : date.Day,
+               defaultHour ? 1 : date.Hour,
+               defaultMinute ? 1 : date.Minute,
+               defaultSecond ? 1 : date.Second,
+               DateTimeKind.Utc);
+
+               return date;
+           };
+
+           return new Error($"The value '{stringValue}' is not a date.");
+       });
+   }
+   */
 
 fn assert_exact_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Result<(), String> {
     if params.len() == count {
@@ -272,7 +362,16 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Gtoe".to_string(), Rc::new(f_greater_than_or_equal));
     funcs.insert("LowerThanOrEqual".to_string(), Rc::new(f_lower_than_or_equal));
     funcs.insert("Ltoe".to_string(), Rc::new(f_lower_than_or_equal));
-
+    funcs.insert("Date".to_string(), Rc::new(f_date));
+    funcs.insert("Now".to_string(), Rc::new(f_now));
+    funcs.insert("Year".to_string(), Rc::new(f_year));
+    funcs.insert("Month".to_string(), Rc::new(f_month));
+    funcs.insert("Day".to_string(), Rc::new(f_day));
+    funcs.insert("DateAddHours".to_string(), Rc::new(f_date_add_hours));
+    funcs.insert("DateAddDays".to_string(), Rc::new(f_date_add_days));
+    funcs.insert("DateAddMonths".to_string(), Rc::new(f_date_add_months));
+    funcs.insert("DateAddYears".to_string(), Rc::new(f_date_add_years));
+    funcs.insert("LocalDate".to_string(), Rc::new(f_local_date));
     funcs
 }
 
@@ -841,4 +940,110 @@ fn f_greater_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> Exp
 // LowerThanOrEqual, Ltoe
 fn f_lower_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     simple_operator(params, values, "LowerThanOrEqual", |a, b| ok_result(Expr::Boolean(a <= b)))
+}
+
+/**********************************/
+/*          DateTime              */
+/**********************************/
+
+// Date
+fn f_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, "Date")?;
+    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    ok_result(Expr::Date(date))
+}
+
+// Now
+fn f_now(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 0, "Now")?;
+    ok_result(Expr::Date(Utc::now()))
+}
+
+const SECONDS_IN_HOURS: ExprDecimal = 60 as ExprDecimal * 60 as ExprDecimal;
+const SECONDS_IN_DAYS: ExprDecimal = SECONDS_IN_HOURS * 24 as ExprDecimal;
+
+// Year
+fn f_year(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, "Year")?;
+    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    ok_result(Expr::Num(date.year() as ExprDecimal))
+}
+
+// Month
+fn f_month(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, "Month")?;
+    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    ok_result(Expr::Num(date.month() as ExprDecimal))
+}
+
+// Day
+fn f_day(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, "Day")?;
+    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    ok_result(Expr::Num(date.day() as ExprDecimal))
+}
+
+// DateAddHours
+fn f_date_add_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "DateAddHours")?;
+    let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    let hours = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
+    let date_time = date_time + Duration::seconds((hours * SECONDS_IN_HOURS) as i64);
+    ok_result(Expr::Date(date_time))
+}
+
+// DateAddDays
+fn f_date_add_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "DateAddDays")?;
+    let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    let days = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
+    let date_time = date_time + Duration::seconds((days * SECONDS_IN_DAYS) as i64);
+    ok_result(Expr::Date(date_time))
+}
+
+// DateAddMonths
+fn f_date_add_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "DateAddMonths")?;
+    let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+
+    let months = exec_expr_to_int(params.get(1).unwrap(), values)?;
+    let month0 = date_time.month0() as i32 + (months as i32);
+    let mut years_to_add = month0 / 12;
+    let mut new_month0 = month0 % 12;
+    if new_month0 < 0 {
+        new_month0 = new_month0 + 12;
+        years_to_add = years_to_add - 1;
+    }
+
+    let mut new_date_time = date_time
+        .with_year(date_time.year() + years_to_add)
+        .ok_or(format!("Couldn't add {} years to the date {}", years_to_add, date_time))?;
+
+    new_date_time =
+        new_date_time
+            .with_month0(new_month0 as u32)
+            .ok_or(format!("Couldn't set {} as month to the date {}", new_month0 + 1, new_date_time))?;
+
+    ok_result(Expr::Date(new_date_time))
+}
+
+// DateAddYears
+fn f_date_add_years(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "DateAddYears")?;
+    let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    let years = exec_expr_to_int(params.get(1).unwrap(), values)? as i32;
+
+    let new_date_time = date_time
+        .with_year(date_time.year() + years)
+        .ok_or(format!("Couldn't add {} years to the date {}", years, date_time))?;
+
+    ok_result(Expr::Date(new_date_time))
+}
+
+// LocalDate
+fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, "LocalDate")?;
+    let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    todo!();
+    ok_result(Expr::Date(date_time))
 }

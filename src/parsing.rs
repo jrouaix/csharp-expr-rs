@@ -34,8 +34,8 @@ fn str_content<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &
     // alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
     // WORKING
     let white_spaces = alt((tag(" "), tag("\t"), tag("_"), tag("-")));
-    let punctuation = alt((tag("."), tag(","), tag("!"), tag("?"), tag("¿"), tag("%"))); // a lot more ! to debug
-                                                                                         // let white_spaces = is_a("&é'(-è_çà@^`|([{~}])");
+    let punctuation = alt((tag("."), tag(","), tag(":"), tag("!"), tag("?"), tag("¿"), tag("%"))); // a lot more ! to debug
+                                                                                                   // let white_spaces = is_a("&é'(-è_çà@^`|([{~}])");
     escaped(alt((alphanumeric1, white_spaces, punctuation)), '\\', one_of("\\\"rnt"))(input)
 
     // TRY 1

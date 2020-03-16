@@ -26,8 +26,11 @@ c# expression parser in Rust
 - [x] Handle `null` value (just in case)
 - [x] Debug ` ` white space and tabs in strings are still strings 
 - [ ] Implement existing functions in BZP system & compare performances
-- [ ] Debug strings should be able to contain any character !
-- [ ] Implement Sql Like function
+- [ ] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
+- [X] Implement Sql Like function
+- [ ] Handle functions determinism
+- [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
+- [ ] Make all default String lazy static or &str
 - [ ] Debug empty string parsing
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
