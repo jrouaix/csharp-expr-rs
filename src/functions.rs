@@ -946,42 +946,45 @@ fn f_lower_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> ExprF
 /*          DateTime              */
 /**********************************/
 
-// Date
-fn f_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_exact_params_count(params, 1, "Date")?;
-    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    ok_result(Expr::Date(date))
-}
-
 // Now
 fn f_now(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 0, "Now")?;
     ok_result(Expr::Date(Utc::now()))
 }
 
-const SECONDS_IN_HOURS: ExprDecimal = 60 as ExprDecimal * 60 as ExprDecimal;
-const SECONDS_IN_DAYS: ExprDecimal = SECONDS_IN_HOURS * 24 as ExprDecimal;
+fn single_date_func<F: FnOnce(DateTime<Utc>) -> ExprFuncResult>(
+    params: &VecRcExpr,
+    values: &IdentifierValues,
+    f_name: &str,
+    func: F,
+) -> ExprFuncResult {
+    assert_exact_params_count(params, 1, f_name)?;
+    let s = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    func(s)
+}
+
+// Date
+fn f_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_date_func(params, values, "Date", |d| ok_result(Expr::Date(d)))
+}
 
 // Year
 fn f_year(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_exact_params_count(params, 1, "Year")?;
-    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    ok_result(Expr::Num(date.year() as ExprDecimal))
+    single_date_func(params, values, "Year", |d| ok_result(Expr::Num(d.year() as ExprDecimal)))
 }
 
 // Month
 fn f_month(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_exact_params_count(params, 1, "Month")?;
-    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    ok_result(Expr::Num(date.month() as ExprDecimal))
+    single_date_func(params, values, "Month", |d| ok_result(Expr::Num(d.month() as ExprDecimal)))
 }
 
 // Day
 fn f_day(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_exact_params_count(params, 1, "Day")?;
-    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    ok_result(Expr::Num(date.day() as ExprDecimal))
+    single_date_func(params, values, "Day", |d| ok_result(Expr::Num(d.day() as ExprDecimal)))
 }
+
+const SECONDS_IN_HOURS: ExprDecimal = 60 as ExprDecimal * 60 as ExprDecimal;
+const SECONDS_IN_DAYS: ExprDecimal = SECONDS_IN_HOURS * 24 as ExprDecimal;
 
 // DateAddHours
 fn f_date_add_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
