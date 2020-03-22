@@ -326,6 +326,12 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("DateDiffHours".to_string(), Rc::new(f_date_diff_hours));
     funcs.insert("DateDiffDays".to_string(), Rc::new(f_date_diff_days));
     funcs.insert("DateDiffMonths".to_string(), Rc::new(f_date_diff_months));
+    funcs.insert("DateEquals".to_string(), Rc::new(f_date_equals));
+    funcs.insert("DateNotEquals".to_string(), Rc::new(f_date_not_equals));
+    funcs.insert("DateLower".to_string(), Rc::new(f_date_lower));
+    funcs.insert("DateLowerOrEquals".to_string(), Rc::new(f_date_lower_or_equals));
+    funcs.insert("DateGreater".to_string(), Rc::new(f_date_greater));
+    funcs.insert("DateGreaterOrEquals".to_string(), Rc::new(f_date_greater_or_equals));
     funcs.insert("DateAddHours".to_string(), Rc::new(f_date_add_hours));
     funcs.insert("DateAddDays".to_string(), Rc::new(f_date_add_days));
     funcs.insert("DateAddMonths".to_string(), Rc::new(f_date_add_months));
@@ -942,7 +948,7 @@ fn f_day(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_date_func(params, values, "Day", |d| Ok(ExprResult::Num(d.day() as ExprDecimal)))
 }
 
-fn two_dates_func<F: FnOnce(DateTime<Utc>, DateTime<Utc>) -> ExprFuncResult>(
+fn two_dates_func_no_defaults<F: FnOnce(DateTime<Utc>, DateTime<Utc>) -> ExprFuncResult>(
     params: &VecRcExpr,
     values: &IdentifierValues,
     f_name: &str,
@@ -954,9 +960,48 @@ fn two_dates_func<F: FnOnce(DateTime<Utc>, DateTime<Utc>) -> ExprFuncResult>(
     func(date_left, date_right)
 }
 
+fn two_dates_func<F: FnOnce(DateTime<Utc>, DateTime<Utc>) -> ExprFuncResult>(
+    params: &VecRcExpr,
+    values: &IdentifierValues,
+    f_name: &str,
+    func: F,
+) -> ExprFuncResult {
+    assert_min_params_count(params, 2, f_name)?;
+    assert_max_params_count(params, 8, f_name)?;
+
+    let default_year = params.get(2).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
+    let default_month = params.get(3).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
+    let default_day = params.get(4).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
+    let default_hour = params.get(5).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
+    let default_minute = params.get(6).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
+    let default_second = params.get(7).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
+
+    let date_left = exec_expr_to_date(
+        params.get(0).unwrap(),
+        values,
+        default_year,
+        default_month,
+        default_day,
+        default_hour,
+        default_minute,
+        default_second,
+    )?;
+    let date_right = exec_expr_to_date(
+        params.get(1).unwrap(),
+        values,
+        default_year,
+        default_month,
+        default_day,
+        default_hour,
+        default_minute,
+        default_second,
+    )?;
+    func(date_left, date_right)
+}
+
 // DateDiff
 fn f_date_diff(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    two_dates_func(params, values, "DateDiff", |d1, d2| Ok(ExprResult::TimeSpan(d1 - d2)))
+    two_dates_func_no_defaults(params, values, "DateDiff", |d1, d2| Ok(ExprResult::TimeSpan(d1 - d2)))
 }
 
 const SECONDS_IN_HOURS: ExprDecimal = 60 as ExprDecimal * 60 as ExprDecimal;
@@ -965,23 +1010,53 @@ const SECONDS_IN_MONTHS: ExprDecimal = SECONDS_IN_DAYS * 30.5 as ExprDecimal;
 
 //DateDiffHours
 fn f_date_diff_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    two_dates_func(params, values, "DateDiffHours", |d1, d2| {
+    two_dates_func_no_defaults(params, values, "DateDiffHours", |d1, d2| {
         Ok(ExprResult::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_HOURS))
     })
 }
 
 // DateDiffDays
 fn f_date_diff_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    two_dates_func(params, values, "DateDiffDays", |d1, d2| {
+    two_dates_func_no_defaults(params, values, "DateDiffDays", |d1, d2| {
         Ok(ExprResult::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_DAYS))
     })
 }
 
 // DateDiffMonths
 fn f_date_diff_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    two_dates_func(params, values, "DateDiffMonths", |d1, d2| {
+    two_dates_func_no_defaults(params, values, "DateDiffMonths", |d1, d2| {
         Ok(ExprResult::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_MONTHS))
     })
+}
+
+// DateEquals
+fn f_date_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateEquals", |d1, d2| Ok(ExprResult::Boolean(d1 == d2)))
+}
+
+// DateNotEquals
+fn f_date_not_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateNotEquals", |d1, d2| Ok(ExprResult::Boolean(d1 != d2)))
+}
+
+// DateLower
+fn f_date_lower(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateLower", |d1, d2| Ok(ExprResult::Boolean(d1 < d2)))
+}
+
+// DateLowerOrEquals
+fn f_date_lower_or_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateLowerOrEquals", |d1, d2| Ok(ExprResult::Boolean(d1 <= d2)))
+}
+
+// DateGreater
+fn f_date_greater(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateGreater", |d1, d2| Ok(ExprResult::Boolean(d1 > d2)))
+}
+
+// DateGreaterOrEquals
+fn f_date_greater_or_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateGreaterOrEquals", |d1, d2| Ok(ExprResult::Boolean(d1 >= d2)))
 }
 
 // DateAddHours
@@ -1048,141 +1123,3 @@ fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     todo!();
     Ok(ExprResult::Date(date_time))
 }
-
-/*
-
-  #region DateTime
-
-
-        [ExpressionFunction(DateCatName, "DateValue", "DateVal", IsNondeterministic = true)]
-        public static Result LocalDate(object text, string timeZoneName = "Romance Standard Time") => ObjectToLocalDateResult(text, timeZoneName);
-
-
-        [ExpressionFunction(DateCatName)]
-        public static Result DateFormat(object date, string format = "yyyy-MM-dd HH:mm:ss.fff") => new Result(() =>
-            {
-                var d = ObjectToDateResult(date); if (d.IsError()) return d;
-                return ((DateTime)d.GetValue()).ToString(format, CultureInfo.InvariantCulture);
-            });
-
-
-        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
-        public static Result NowSpecificTimeZone(string timeZone) => new Result(
-            () => timeZone.IsNullOrEmpty()
-                  ? DateTime.UtcNow
-                  : DateTime.UtcNow.FromTimeZoneString(timeZone)
-            );
-
-        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
-        public static Result Today() => new Result(() => DateTime.UtcNow.Date);
-
-        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
-        public static Result Time() => new Result(() => DateTime.UtcNow.TimeOfDay);
-
-
-        [ExpressionFunction(DateCatName)]
-        public static Result DateEquals(
-            object date1,
-            object date2,
-            bool defaultYear = false,
-            bool defaultMonth = false,
-            bool defaultDay = false,
-            bool defaultHour = false,
-            bool defaultMinute = false,
-            bool defaultSecond = false)
-            => new Result(() =>
-            {
-                var d1 = ObjectToDateResult(date1, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d1.IsError()) return d1;
-                var d2 = ObjectToDateResult(date2, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d2.IsError()) return d2;
-                return ((DateTime)d1.GetValue()) == ((DateTime)d2.GetValue());
-            });
-
-        [ExpressionFunction(DateCatName)]
-        public static Result DateNotEquals(
-            object date1,
-            object date2,
-            bool defaultYear = false,
-            bool defaultMonth = false,
-            bool defaultDay = false,
-            bool defaultHour = false,
-            bool defaultMinute = false,
-            bool defaultSecond = false)
-            => new Result(() =>
-            {
-                var d1 = ObjectToDateResult(date1, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d1.IsError()) return d1;
-                var d2 = ObjectToDateResult(date2, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d2.IsError()) return d2;
-                return ((DateTime)d1.GetValue()) != ((DateTime)d2.GetValue());
-            });
-
-        [ExpressionFunction(DateCatName)]
-        public static Result DateLower(
-            object date1,
-            object date2,
-            bool defaultYear = false,
-            bool defaultMonth = false,
-            bool defaultDay = false,
-            bool defaultHour = false,
-            bool defaultMinute = false,
-            bool defaultSecond = false)
-            => new Result(() =>
-            {
-                var d1 = ObjectToDateResult(date1, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d1.IsError()) return d1;
-                var d2 = ObjectToDateResult(date2, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d2.IsError()) return d2;
-                return ((DateTime)d1.GetValue()) < ((DateTime)d2.GetValue());
-            });
-
-        [ExpressionFunction(DateCatName)]
-        public static Result DateLowerOrEquals(
-            object date1,
-            object date2,
-            bool defaultYear = false,
-            bool defaultMonth = false,
-            bool defaultDay = false,
-            bool defaultHour = false,
-            bool defaultMinute = false,
-            bool defaultSecond = false)
-            => new Result(() =>
-            {
-                var d1 = ObjectToDateResult(date1, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d1.IsError()) return d1;
-                var d2 = ObjectToDateResult(date2, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d2.IsError()) return d2;
-                return ((DateTime)d1.GetValue()) <= ((DateTime)d2.GetValue());
-            });
-
-        [ExpressionFunction(DateCatName)]
-        public static Result DateGreater(
-            object date1,
-            object date2,
-            bool defaultYear = false,
-            bool defaultMonth = false,
-            bool defaultDay = false,
-            bool defaultHour = false,
-            bool defaultMinute = false,
-            bool defaultSecond = false)
-            => new Result(() =>
-            {
-                var d1 = ObjectToDateResult(date1, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d1.IsError()) return d1;
-                var d2 = ObjectToDateResult(date2, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d2.IsError()) return d2;
-                return ((DateTime)d1.GetValue()) > ((DateTime)d2.GetValue());
-            });
-
-        [ExpressionFunction(DateCatName)]
-        public static Result DateGreaterOrEquals(
-            object date1,
-            object date2,
-            bool defaultYear = false,
-            bool defaultMonth = false,
-            bool defaultDay = false,
-            bool defaultHour = false,
-            bool defaultMinute = false,
-            bool defaultSecond = false)
-            => new Result(() =>
-            {
-                var d1 = ObjectToDateResult(date1, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d1.IsError()) return d1;
-                var d2 = ObjectToDateResult(date2, defaultYear, defaultMonth, defaultDay, defaultHour, defaultMinute, defaultSecond); if (d2.IsError()) return d2;
-                return ((DateTime)d1.GetValue()) >= ((DateTime)d2.GetValue());
-            });
-
-        #endregion
-
-
-*/
