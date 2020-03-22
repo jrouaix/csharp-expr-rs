@@ -24,7 +24,8 @@ c# expression parser in Rust
 - [x] More tests about identifiers list
 - [x] Couldn't prepare a function inside an unknown function => OK, expected behavior
 - [x] Handle `null` value (just in case)
-- [x] Debug ` ` white space and tabs in strings are still strings 
+- [x] Debug ` ` white space and tabs in strings are still strings
+- [x] Segregate Expr & ExprResult enum types
 - [ ] Implement existing functions in BZP system & compare performances
 - [ ] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
 - [X] Implement Sql Like function

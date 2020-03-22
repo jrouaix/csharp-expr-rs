@@ -12,7 +12,7 @@ use std::rc::Rc;
 pub type RcExpr = Rc<Expr>;
 pub type VecRcExpr = Vec<RcExpr>;
 pub type SliceRcExpr = [RcExpr];
-pub type ExprFuncResult = Result<RcExpr, String>;
+pub type ExprFuncResult = Result<ExprResult, String>;
 pub type FunctionImpl = dyn Fn(&VecRcExpr, &IdentifierValues) -> ExprFuncResult;
 pub type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
 pub type IdentifierValueGetter = dyn Fn() -> String;
@@ -26,14 +26,24 @@ pub enum Expr {
     Str(String),
     Boolean(bool),
     Num(ExprDecimal),
-    Date(DateTime<Utc>), // only used as functions return type
-    TimeSpan(Duration),  // only used as functions return type
     Null,
     Array(VecRcExpr),
     Identifier(String),
     FunctionCall(String, VecRcExpr),
     PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>),
     // BinaryOperator(RcExpr, RcExpr, AssocOp)
+}
+
+#[derive(Clone, Debug)]
+pub enum ExprResult {
+    Str(String),
+    Boolean(bool),
+    Num(ExprDecimal),
+    Date(DateTime<Utc>),
+    TimeSpan(Duration),
+    Null,
+
+    NonExecuted(RcExpr),
 }
 
 #[repr(C)]
@@ -49,8 +59,6 @@ impl fmt::Debug for Expr {
             Expr::Str(x) => write!(f, "Str({:?})", x),
             Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
             Expr::Num(x) => write!(f, "Num({:?})", x),
-            Expr::Date(x) => write!(f, "Date({:?})", x),
-            Expr::TimeSpan(x) => write!(f, "TimeSpan({:?})", x),
             Expr::Null => write!(f, "Null"),
             Expr::Array(x) => write!(f, "Array({:?})", x),
             Expr::Identifier(x) => write!(f, "Identifier({:?})", x),
@@ -66,13 +74,25 @@ impl cmp::PartialEq for Expr {
             (Expr::Str(x_a), Expr::Str(x_b)) => x_a == x_b,
             (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
-            (Expr::Date(x_a), Expr::Date(x_b)) => x_a == x_b,
-            (Expr::TimeSpan(x_a), Expr::TimeSpan(x_b)) => x_a == x_b,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
             (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => n_a == n_b && p_a == p_b,
-            (Expr::Null, Expr::Null) => true, // todo : should be false !? => implemented in the `f_are_equals` function
+            (Expr::Null, Expr::Null) => true,
+            _ => false,
+        }
+    }
+}
+
+impl cmp::PartialEq for ExprResult {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ExprResult::Str(x_a), ExprResult::Str(x_b)) => x_a == x_b,
+            (ExprResult::Boolean(x_a), ExprResult::Boolean(x_b)) => x_a == x_b,
+            (ExprResult::Num(x_a), ExprResult::Num(x_b)) => x_a == x_b,
+            (ExprResult::Date(x_a), ExprResult::Date(x_b)) => x_a == x_b,
+            (ExprResult::TimeSpan(x_a), ExprResult::TimeSpan(x_b)) => x_a == x_b,
+            (ExprResult::Null, ExprResult::Null) => true, // todo : should be false !? => implemented in the `f_are_equals` function
             _ => false,
         }
     }
@@ -84,8 +104,6 @@ impl Display for Expr {
             Expr::Str(s) => write!(f, "{}", s),
             Expr::Boolean(b) => write!(f, "{}", b),
             Expr::Num(n) => write!(f, "{}", n),
-            Expr::Date(d) => write!(f, "{}", d),
-            Expr::TimeSpan(d) => write!(f, "{}", d),
             Expr::Null => write!(f, ""),
             Expr::Array(_) => write!(f, "Array"),
             Expr::Identifier(i) => write!(f, "[{}]", i),
@@ -95,19 +113,25 @@ impl Display for Expr {
     }
 }
 
-impl Expr {
+impl Display for ExprResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExprResult::Str(s) => write!(f, "{}", s),
+            ExprResult::Boolean(b) => write!(f, "{}", b),
+            ExprResult::Num(n) => write!(f, "{}", n),
+            ExprResult::Date(d) => write!(f, "{}", d),
+            ExprResult::TimeSpan(d) => write!(f, "{}", d),
+            ExprResult::Null => write!(f, ""),
+            ExprResult::NonExecuted(rc_expr) => write!(f, "{}", rc_expr),
+        }
+    }
+}
+
+impl ExprResult {
     pub fn is_final(&self) -> bool {
         match self {
-            Expr::Str(_) => true,
-            Expr::Boolean(_) => true,
-            Expr::Num(_) => true,
-            Expr::Date(_) => true,
-            Expr::TimeSpan(_) => true,
-            Expr::Null => true,
-            Expr::Array(_) => false,
-            Expr::Identifier(_) => false,
-            Expr::FunctionCall(_, _) => false,
-            Expr::PreparedFunctionCall(_, _, _) => false,
+            ExprResult::NonExecuted(_) => false,
+            _ => true,
         }
     }
 }
@@ -152,24 +176,26 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
     }
 }
 
-pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<RcExpr, String> {
+pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<ExprResult, String> {
     match expr.as_ref() {
-        Expr::Str(_) => Ok(expr.clone()),
-        Expr::Boolean(b) => Ok(Rc::new(Expr::Boolean(*b))),
-        Expr::Num(f) => Ok(Rc::new(Expr::Num(*f))),
-        Expr::Date(d) => Ok(Rc::new(Expr::Date(*d))),
-        Expr::TimeSpan(d) => Ok(Rc::new(Expr::TimeSpan(*d))),
-        Expr::Null => Ok(Rc::new(Expr::Null)),
-        Expr::Array(_) => Ok(expr.clone()),
+        Expr::Str(s) => Ok(ExprResult::Str(s.clone())),
+        Expr::Boolean(b) => Ok(ExprResult::Boolean(*b)),
+        Expr::Num(f) => Ok(ExprResult::Num(*f)),
+        Expr::Null => Ok(ExprResult::Null),
+        Expr::Array(_) => Ok(ExprResult::NonExecuted(expr.clone())),
         Expr::Identifier(name) => match &values.get(name) {
-            Some(s) => Ok(Rc::new(Expr::Str(s()))),
+            Some(s) => Ok(ExprResult::Str(s())),
             None => Err(format!("Unable to find value for identifier named '{}'", name)),
         },
         // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(name, _parameters) => Err(format!("Unable to find the function named '{}'", name)),
         Expr::PreparedFunctionCall(_, parameters, fnc) => {
             let call_result = fnc(&parameters, &values)?;
-            exec_expr(&call_result, values)
+            if let ExprResult::NonExecuted(expr) = call_result {
+                exec_expr(&expr, values)
+            } else {
+                Ok(call_result)
+            }
         }
     }
 }
@@ -185,9 +211,19 @@ mod tests {
             Rc::new(Expr::Str($x))
         };
     }
+    macro_rules! exprresult_str {
+        ( $x:expr ) => {
+            ExprResult::Str($x)
+        };
+    }
     macro_rules! rc_expr_num {
         ( $x:expr ) => {
             Rc::new(Expr::Num($x))
+        };
+    }
+    macro_rules! exprresult_num {
+        ( $x:expr ) => {
+            ExprResult::Num($x)
         };
     }
     macro_rules! rc_expr_null {
@@ -299,7 +335,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             "knownFunc".to_string(),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(rc_expr_num!(42_f64))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42_f64))),
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs);
         println!("{:?}", expr);
@@ -313,16 +349,21 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             "first".to_string(),
-            Rc::new(|v: &VecRcExpr, _: &IdentifierValues| v.first().map_or_else(|| Err("There was no first value.".to_string()), |x| Ok(x.clone()))),
+            Rc::new(|v: &VecRcExpr, _: &IdentifierValues| {
+                v.first().map_or_else(
+                    || Err("There was no first value.".to_string()),
+                    |x| Ok(ExprResult::NonExecuted(x.clone())),
+                )
+            }),
         );
 
         funcs.insert(
             "forty_two".to_string(),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(rc_expr_num!(42_f64))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42_f64))),
         );
         funcs.insert(
             "forty_two_str".to_string(),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(rc_expr_str!("42".to_string()))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_str!("42".to_string()))),
         );
 
         let mut values = IdentifierValues::new();
