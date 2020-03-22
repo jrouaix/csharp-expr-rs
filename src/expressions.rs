@@ -2,6 +2,7 @@ use crate::parsing::*;
 use std::fmt::Display;
 
 use chrono::prelude::*;
+use chrono::Duration;
 use nom::error::ErrorKind;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
@@ -26,6 +27,7 @@ pub enum Expr {
     Boolean(bool),
     Num(ExprDecimal),
     Date(DateTime<Utc>), // only used as functions return type
+    TimeSpan(Duration),  // only used as functions return type
     Null,
     Array(VecRcExpr),
     Identifier(String),
@@ -48,6 +50,7 @@ impl fmt::Debug for Expr {
             Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
             Expr::Num(x) => write!(f, "Num({:?})", x),
             Expr::Date(x) => write!(f, "Date({:?})", x),
+            Expr::TimeSpan(x) => write!(f, "TimeSpan({:?})", x),
             Expr::Null => write!(f, "Null"),
             Expr::Array(x) => write!(f, "Array({:?})", x),
             Expr::Identifier(x) => write!(f, "Identifier({:?})", x),
@@ -64,6 +67,7 @@ impl cmp::PartialEq for Expr {
             (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
             (Expr::Date(x_a), Expr::Date(x_b)) => x_a == x_b,
+            (Expr::TimeSpan(x_a), Expr::TimeSpan(x_b)) => x_a == x_b,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
@@ -81,6 +85,7 @@ impl Display for Expr {
             Expr::Boolean(b) => write!(f, "{}", b),
             Expr::Num(n) => write!(f, "{}", n),
             Expr::Date(d) => write!(f, "{}", d),
+            Expr::TimeSpan(d) => write!(f, "{}", d),
             Expr::Null => write!(f, ""),
             Expr::Array(_) => write!(f, "Array"),
             Expr::Identifier(i) => write!(f, "[{}]", i),
@@ -97,6 +102,7 @@ impl Expr {
             Expr::Boolean(_) => true,
             Expr::Num(_) => true,
             Expr::Date(_) => true,
+            Expr::TimeSpan(_) => true,
             Expr::Null => true,
             Expr::Array(_) => false,
             Expr::Identifier(_) => false,
@@ -152,6 +158,7 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<R
         Expr::Boolean(b) => Ok(Rc::new(Expr::Boolean(*b))),
         Expr::Num(f) => Ok(Rc::new(Expr::Num(*f))),
         Expr::Date(d) => Ok(Rc::new(Expr::Date(*d))),
+        Expr::TimeSpan(d) => Ok(Rc::new(Expr::TimeSpan(*d))),
         Expr::Null => Ok(Rc::new(Expr::Null)),
         Expr::Array(_) => Ok(expr.clone()),
         Expr::Identifier(name) => match &values.get(name) {
@@ -488,6 +495,8 @@ mod tests {
     #[test_case("Month(\"1996-12-19T16:39:57-08:00\")" => "12")]
     #[test_case("Day(\"1996-12-19T16:39:57-08:00\")" => "20")]
     #[test_case("Day(\"1996-12-07T16:39:57Z\")" => "7")]
+    #[test_case("DateDiff(\"1996-12-07T16:39:57Z\", \"1996-12-07T16:39:57Z\")" => "PT0S")]
+    #[test_case("DateDiff(\"1995-6-07T16:39:52Z\", \"1996-12-07T16:39:57Z\")" => "-PT5S")]
     #[test_case("DateAddHours(Date(\"1996-12-19T16:39:57-08:00\"), -8)" => "1996-12-19 16:39:57 UTC")]
     #[test_case("DateAddHours(\"1996-12-19T16:39:57-08:00\", -8.5)" => "1996-12-19 16:09:57 UTC")]
     #[test_case("DateAddDays(\"1996-12-19T16:39:57-08:00\", 1.5)" => "1996-12-21 12:39:57 UTC")]

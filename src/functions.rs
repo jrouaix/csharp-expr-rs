@@ -367,6 +367,10 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("Year".to_string(), Rc::new(f_year));
     funcs.insert("Month".to_string(), Rc::new(f_month));
     funcs.insert("Day".to_string(), Rc::new(f_day));
+    funcs.insert("DateDiff".to_string(), Rc::new(f_date_diff));
+    funcs.insert("DateDiffHours".to_string(), Rc::new(f_date_diff_hours));
+    funcs.insert("DateDiffDays".to_string(), Rc::new(f_date_diff_days));
+    funcs.insert("DateDiffMonths".to_string(), Rc::new(f_date_diff_months));
     funcs.insert("DateAddHours".to_string(), Rc::new(f_date_add_hours));
     funcs.insert("DateAddDays".to_string(), Rc::new(f_date_add_days));
     funcs.insert("DateAddMonths".to_string(), Rc::new(f_date_add_months));
@@ -959,8 +963,8 @@ fn single_date_func<F: FnOnce(DateTime<Utc>) -> ExprFuncResult>(
     func: F,
 ) -> ExprFuncResult {
     assert_exact_params_count(params, 1, f_name)?;
-    let s = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    func(s)
+    let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    func(date)
 }
 
 // Date
@@ -983,8 +987,47 @@ fn f_day(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_date_func(params, values, "Day", |d| ok_result(Expr::Num(d.day() as ExprDecimal)))
 }
 
+fn two_dates_func<F: FnOnce(DateTime<Utc>, DateTime<Utc>) -> ExprFuncResult>(
+    params: &VecRcExpr,
+    values: &IdentifierValues,
+    f_name: &str,
+    func: F,
+) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, f_name)?;
+    let date_left = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    let date_right = exec_expr_to_date_no_defaults(params.get(1).unwrap(), values)?;
+    func(date_left, date_right)
+}
+
+// DateDiff
+fn f_date_diff(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateDiff", |d1, d2| ok_result(Expr::TimeSpan(d1 - d2)))
+}
+
 const SECONDS_IN_HOURS: ExprDecimal = 60 as ExprDecimal * 60 as ExprDecimal;
 const SECONDS_IN_DAYS: ExprDecimal = SECONDS_IN_HOURS * 24 as ExprDecimal;
+const SECONDS_IN_MONTHS: ExprDecimal = SECONDS_IN_DAYS * 30.5 as ExprDecimal;
+
+//DateDiffHours
+fn f_date_diff_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateDiffHours", |d1, d2| {
+        ok_result(Expr::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_HOURS))
+    })
+}
+
+// DateDiffDays
+fn f_date_diff_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateDiffDays", |d1, d2| {
+        ok_result(Expr::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_DAYS))
+    })
+}
+
+// DateDiffMonths
+fn f_date_diff_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    two_dates_func(params, values, "DateDiffMonths", |d1, d2| {
+        ok_result(Expr::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_MONTHS))
+    })
+}
 
 // DateAddHours
 fn f_date_add_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
