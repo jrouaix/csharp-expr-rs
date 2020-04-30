@@ -149,6 +149,15 @@ fn assert_min_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Re
     }
 }
 
+fn assert_between_params_count(params: &VecRcExpr, count_min: usize, count_max: usize, f_name: &str) -> Result<(), String> {
+    let len = params.len();
+    if len < count_min || len > count_max {
+        Err(format!("Function {} should have between {} and {} parameters", f_name, count_min, count_max).to_string())
+    } else {
+        Ok(())
+    }
+}
+
 /**********************************/
 /*          Regex helpers         */
 /**********************************/
@@ -440,8 +449,7 @@ fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
 // Find
 fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_min_params_count(params, 2, "Find")?;
-    assert_max_params_count(params, 3, "Find")?;
+    assert_between_params_count(params, 2, 3, "Find")?;
     let start_num: usize = match params.get(2) {
         None => 0,
         Some(epxr) => (exec_expr_to_int(epxr, values)? - 1).max(0) as usize,
@@ -475,8 +483,7 @@ fn f_substitute(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
 
 // Fixed
 fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_min_params_count(params, 1, "Fixed")?;
-    assert_max_params_count(params, 3, "Fixed")?;
+    assert_between_params_count(params, 1, 3, "Fixed")?;
 
     let number = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
 
@@ -635,8 +642,7 @@ fn f_split(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
 // NumberValue
 fn f_number_value(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_min_params_count(params, 1, "NumberValue")?;
-    assert_max_params_count(params, 2, "NumberValue")?;
+    assert_between_params_count(params, 1, 2, "NumberValue")?;
     let separator = match params.get(1) {
         None => None,
         Some(expr) => exec_expr_to_string(expr, values)?.chars().next(),
@@ -966,8 +972,7 @@ fn two_dates_func<F: FnOnce(DateTime<Utc>, DateTime<Utc>) -> ExprFuncResult>(
     f_name: &str,
     func: F,
 ) -> ExprFuncResult {
-    assert_min_params_count(params, 2, f_name)?;
-    assert_max_params_count(params, 8, f_name)?;
+    assert_between_params_count(params, 2, 8, f_name)?;
 
     let default_year = params.get(2).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
     let default_month = params.get(3).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
@@ -1118,8 +1123,46 @@ fn f_date_add_years(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 
 // LocalDate
 fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    assert_exact_params_count(params, 1, "LocalDate")?;
+    assert_between_params_count(params, 1, 2, "LocalDate")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    todo!();
+
+    let now = Utc::now();
     Ok(ExprResult::Date(date_time))
 }
+
+/*
+
+  #region DateTime
+
+
+        [ExpressionFunction(DateCatName, "DateValue", "DateVal", IsNondeterministic = true)]
+        public static Result LocalDate(object text, string timeZoneName = "Romance Standard Time") => ObjectToLocalDateResult(text, timeZoneName);
+
+
+        [ExpressionFunction(DateCatName)]
+        public static Result DateFormat(object date, string format = "yyyy-MM-dd HH:mm:ss.fff") => new Result(() =>
+            {
+                var d = ObjectToDateResult(date); if (d.IsError()) return d;
+                return ((DateTime)d.GetValue()).ToString(format, CultureInfo.InvariantCulture);
+            });
+
+
+        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
+        public static Result NowSpecificTimeZone(string timeZone) => new Result(
+            () => timeZone.IsNullOrEmpty()
+                  ? DateTime.UtcNow
+                  : DateTime.UtcNow.FromTimeZoneString(timeZone)
+            );
+
+        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
+        public static Result Today() => new Result(() => DateTime.UtcNow.Date);
+
+        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
+        public static Result Time() => new Result(() => DateTime.UtcNow.TimeOfDay);
+
+
+
+        #endregion
+
+
+*/
