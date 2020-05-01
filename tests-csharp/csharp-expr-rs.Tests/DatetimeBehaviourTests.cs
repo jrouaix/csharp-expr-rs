@@ -22,5 +22,22 @@ namespace csharp_expr_rs.Tests
             new DateTime(2020, 1, 1).AddYears(1).ShouldBe(new DateTime(2021, 1, 1)); // Leap year yet it's on time
             //new DateTime(2020, 1, 1).AddYears(0.5).ShouldBe(new DateTime(2021, 1, 1);
         }
+
+
+        [Fact]
+        public void PrintTimezones()
+        {
+            var sb = new StringBuilder();
+            foreach (TimeZoneInfo z in TimeZoneInfo.GetSystemTimeZones())
+            {
+                var offset = z.BaseUtcOffset;
+                var direction = (offset >= TimeSpan.Zero) ? "east" : "west";
+                var seconds = (int)Math.Abs(offset.TotalSeconds);
+
+                string line = $"m.insert(\"{z.Id}\", FixedOffset::{direction}({seconds}));";
+                sb.AppendLine(line);
+                _output.WriteLine(line);
+            }
+        }
     }
 }
