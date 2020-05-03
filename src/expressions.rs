@@ -546,6 +546,12 @@ mod tests {
     #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", -5)" => "1996-07-20 00:39:57")]
     #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", -15)" => "1995-09-20 00:39:57")]
     #[test_case("LocalDate(\"1996-12-19T16:39:57Z\", \"Romance Standard Time\")" => "1996-12-19 17:39:57")]
+    #[test_case("DateFormat(\"1996-12-19T16:39:57Z\")" => "1996-12-19 16:39:57.000")]
+    #[test_case("DateFormat(\"1996-12-19T16:39:57.123Z\")" => "1996-12-19 16:39:57.123")]
+    #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"yyyy-MMM-mm\")" => "2021-Dec-39")]
+    #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"yyyy-MMMM-dd\")" => "2021-December-19")]
+    #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"h:m:s\")" => " 4:39:57")]
+    #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"H:m:s\")" => "16:39:57")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

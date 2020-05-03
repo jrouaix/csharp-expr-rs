@@ -1,6 +1,7 @@
 use crate::expressions::*;
 use chrono::{prelude::*, Duration};
 use num_format::{Locale, ToFormattedString};
+use regex::Captures;
 use regex::{Regex, RegexBuilder};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -182,24 +183,6 @@ fn make_case_insensitive_equals_regex(search_pattern: &str) -> Result<Regex, Str
     Ok(regex)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use test_case::test_case;
-    #[test_case("abcd" => "^abcd$")]
-    #[test_case("a_cd" => "^a.{1}cd$")]
-    #[test_case("ab%d" => "^ab.*d$")]
-    #[test_case("ab%%cd" => "^ab%cd$")]
-    #[test_case("_abc" => "^.{1}abc$")]
-    #[test_case("%abc" => "^.*abc$")]
-    #[test_case("def_" => "^def.{1}$")]
-    #[test_case("def%" => "^def.*$")]
-    #[test_case("_O__%%___%%%O%" => "^.{1}O_%_.{1}%.*O.*$")]
-    fn test_like_pattern_to_regex_pattern(like_pattern: &str) -> String {
-        like_pattern_to_regex_pattern(like_pattern)
-    }
-}
-
 fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
     let mut result = String::new();
     result.push('^');
@@ -347,6 +330,7 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("DateAddMonths".to_string(), Rc::new(f_date_add_months));
     funcs.insert("DateAddYears".to_string(), Rc::new(f_date_add_years));
     funcs.insert("LocalDate".to_string(), Rc::new(f_local_date));
+    funcs.insert("DateFormat".to_string(), Rc::new(f_date_format));
     funcs
 }
 
@@ -1133,6 +1117,109 @@ fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     let offset = get_utc_offset(&time_zone_name)?;
     let new_dt = DateTime::<Local>::from_utc(date_time, *offset);
     Ok(ExprResult::Date(new_dt.naive_local()))
+}
+
+// DateFormat
+fn f_date_format(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_between_params_count(params, 1, 2, "DateFormat")?;
+    let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
+    let format = params
+        .get(1)
+        .map_or(Ok("yyyy-MM-dd HH:mm:ss.fff".into()), |expr| exec_expr_to_string(expr, values))?;
+
+    let format = dotnet_format_to_strptime_format(&format);
+    let result = date_time.format(&format);
+
+    Ok(ExprResult::Str(result.to_string()))
+}
+
+fn dotnet_format_to_strptime_format(dotnet_format: &str) -> String {
+    lazy_static! {
+        static ref REPLACEMENTS: [(Regex, &'static str); 46] = [
+            (Regex::new("dddd").unwrap(), "%A"),
+            (Regex::new("ddd").unwrap(), "%a"),
+            (Regex::new("dd").unwrap(), "%DAY"),
+            (Regex::new("d").unwrap(), "%e"),
+            (Regex::new("%DAY").unwrap(), "%d"),
+            // Ok it's scrappy but (?<!%)d => Error
+            // look-around, including look-ahead and look-behind, is not supported
+            (Regex::new("fffffff").unwrap(), "%7f"),
+            (Regex::new("ffffff").unwrap(), "%6f"),
+            (Regex::new("fffff").unwrap(), "%5f"),
+            (Regex::new("ffff").unwrap(), "%4f"),
+            (Regex::new("fff").unwrap(), "%3f"),
+            (Regex::new("ff").unwrap(), "%2f"),
+            // (Regex::new("f").unwrap(), "%1f"), // Not supporting this one, no one uses it anyway
+            (Regex::new("FFFFFFF").unwrap(), "%7f"),
+            (Regex::new("FFFFFF").unwrap(), "%6f"),
+            (Regex::new("FFFFF").unwrap(), "%5f"),
+            (Regex::new("FFFF").unwrap(), "%4f"),
+            (Regex::new("FFF").unwrap(), "%3f"),
+            (Regex::new("FF").unwrap(), "%2f"),
+            (Regex::new("F").unwrap(), "%1f"),
+            (Regex::new("hh").unwrap(), "%I"),
+            (Regex::new("h").unwrap(), "%l"),
+            (Regex::new("HH").unwrap(), "%_OURS"),
+            (Regex::new("H").unwrap(), "%k"),
+            (Regex::new("%_OURS").unwrap(), "%H"),
+            (Regex::new("mm").unwrap(), "%_INUTE"),  // same, kind of unsupported
+            (Regex::new("m").unwrap(), "%_INUTE"),   // same, kind of unsupported
+            (Regex::new("MMMM").unwrap(), "%B"),
+            (Regex::new("MMM").unwrap(), "%b"),
+            (Regex::new("MM").unwrap(), "%m"),
+            (Regex::new("M").unwrap(), "%m"),
+            (Regex::new("%_INUTE").unwrap(), "%M"),
+            (Regex::new("%_INUTE").unwrap(), "%M"),
+            (Regex::new("ss").unwrap(), "%S"),
+            (Regex::new("s").unwrap(), "%S"),
+            (Regex::new("tt").unwrap(), "%P"),
+            (Regex::new("t").unwrap(), "%P"),
+            (Regex::new("yyyyy").unwrap(), "%Y"),
+            (Regex::new("yyyy").unwrap(), "%Y"),
+            (Regex::new("yyy").unwrap(), "%Y"),
+            (Regex::new("yy").unwrap(), "%YEAR"),
+            (Regex::new("y").unwrap(), "%y"),
+            (Regex::new("%YEAR").unwrap(), "%y"),
+            (Regex::new("zzz").unwrap(), "%:_one"),
+            (Regex::new("zz").unwrap(), "%_one"),
+            (Regex::new("z").unwrap(), "%z"),
+            (Regex::new("%_one").unwrap(), "%z"),
+            (Regex::new("%:_one").unwrap(), "%:z"),
+        ];
+    }
+
+    let result = REPLACEMENTS.iter().fold(dotnet_format.to_string(), |acc, replacer| {
+        // let res = replacer.0.replace(&acc, replacer.1).to_string();
+        // println!("{}", res);
+        // res
+        replacer.0.replace(&acc, replacer.1).to_string()
+    });
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case("yyyy-MM-dd HH:mm:ss.fff" => "%Y-%m-%d %H:%M:%S.%3f")]
+    fn test_dotnet_format_to_strptime_format(dotnet_format: &str) -> String {
+        dotnet_format_to_strptime_format(dotnet_format)
+    }
+
+    #[test_case("abcd" => "^abcd$")]
+    #[test_case("a_cd" => "^a.{1}cd$")]
+    #[test_case("ab%d" => "^ab.*d$")]
+    #[test_case("ab%%cd" => "^ab%cd$")]
+    #[test_case("_abc" => "^.{1}abc$")]
+    #[test_case("%abc" => "^.*abc$")]
+    #[test_case("def_" => "^def.{1}$")]
+    #[test_case("def%" => "^def.*$")]
+    #[test_case("_O__%%___%%%O%" => "^.{1}O_%_.{1}%.*O.*$")]
+    fn test_like_pattern_to_regex_pattern(like_pattern: &str) -> String {
+        like_pattern_to_regex_pattern(like_pattern)
+    }
 }
 
 // Could be replaced by ? https://github.com/chronotope/chrono-tz/
