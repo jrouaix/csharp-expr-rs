@@ -553,6 +553,8 @@ mod tests {
     #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"h:m:s\")" => " 4:39:57")]
     #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"H:m:s\")" => "16:39:57")]
     // #[test_case("NowSpecificTimeZone(\"Saratov Standard Time\")" => "16:39:57")]
+    // #[test_case("Today()" => "---")]
+    // #[test_case("Time()" => "---")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())

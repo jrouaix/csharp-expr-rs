@@ -77,7 +77,7 @@ fn exec_expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, S
     let res = exec_expr(expr, values)?;
     match &res {
         ExprResult::Boolean(b) => Ok(*b),
-        ExprResult::Num(n) => Ok(*n == 1 as ExprDecimal),
+        ExprResult::Num(n) => Ok(*n == (1 as ExprDecimal)),
         ExprResult::Str(s) => Ok(TRUE_STRING.is_match(&*s)),
         _ => Err(format!("'{}' is not a boolean", expr)),
     }
@@ -332,6 +332,8 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("LocalDate".to_string(), Rc::new(f_local_date));
     funcs.insert("DateFormat".to_string(), Rc::new(f_date_format));
     funcs.insert("NowSpecificTimeZone".to_string(), Rc::new(f_now_specific_timezone));
+    funcs.insert("Today".to_string(), Rc::new(f_today));
+    funcs.insert("Time".to_string(), Rc::new(f_time));
     funcs
 }
 
@@ -909,6 +911,20 @@ fn f_now(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
     Ok(ExprResult::Date(Utc::now().naive_utc()))
 }
 
+// Today
+fn f_today(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 0, "Today")?;
+    let date = NaiveDateTime::new(Utc::now().date().naive_utc(), NaiveTime::from_hms(0, 0, 0));
+    Ok(ExprResult::Date(date))
+}
+
+// Time
+fn f_time(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 0, "Time")?;
+    let duration = Utc::now().time().signed_duration_since(NaiveTime::from_hms(0, 0, 0));
+    Ok(ExprResult::TimeSpan(duration))
+}
+
 // NowSpecificTimeZone
 fn f_now_specific_timezone(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 0, 1, "NowSpecificTimeZone")?;
@@ -1394,20 +1410,3 @@ fn get_utc_offset(time_zone_name: &str) -> Result<&'static FixedOffset, String> 
         Err(format!("Unable to find a time zone named '{}'", time_zone_name))
     }
 }
-
-/*
-
-  #region DateTime
-
-        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
-        public static Result Today() => new Result(() => DateTime.UtcNow.Date);
-
-        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
-        public static Result Time() => new Result(() => DateTime.UtcNow.TimeOfDay);
-
-
-
-        #endregion
-
-
-*/
