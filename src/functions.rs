@@ -331,6 +331,7 @@ pub fn get_functions() -> FunctionImplList {
     funcs.insert("DateAddYears".to_string(), Rc::new(f_date_add_years));
     funcs.insert("LocalDate".to_string(), Rc::new(f_local_date));
     funcs.insert("DateFormat".to_string(), Rc::new(f_date_format));
+    funcs.insert("NowSpecificTimeZone".to_string(), Rc::new(f_now_specific_timezone));
     funcs
 }
 
@@ -908,6 +909,23 @@ fn f_now(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
     Ok(ExprResult::Date(Utc::now().naive_utc()))
 }
 
+// NowSpecificTimeZone
+fn f_now_specific_timezone(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_between_params_count(params, 0, 1, "NowSpecificTimeZone")?;
+
+    let now = Utc::now();
+
+    Ok(ExprResult::Date(match params.get(0) {
+        None => now.naive_utc(),
+        Some(expr) => {
+            let time_zone_name = exec_expr_to_string(expr, values)?;
+            let offset = get_utc_offset(&time_zone_name)?;
+            let new_dt = now.with_timezone(offset);
+            new_dt.naive_local()
+        }
+    }))
+}
+
 fn single_date_func<F: FnOnce(NaiveDateTime) -> ExprFuncResult>(
     params: &VecRcExpr,
     values: &IdentifierValues,
@@ -1133,6 +1151,30 @@ fn f_date_format(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResul
     Ok(ExprResult::Str(result.to_string()))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case("yyyy-MM-dd HH:mm:ss.fff" => "%Y-%m-%d %H:%M:%S.%3f")]
+    fn test_dotnet_format_to_strptime_format(dotnet_format: &str) -> String {
+        dotnet_format_to_strptime_format(dotnet_format)
+    }
+
+    #[test_case("abcd" => "^abcd$")]
+    #[test_case("a_cd" => "^a.{1}cd$")]
+    #[test_case("ab%d" => "^ab.*d$")]
+    #[test_case("ab%%cd" => "^ab%cd$")]
+    #[test_case("_abc" => "^.{1}abc$")]
+    #[test_case("%abc" => "^.*abc$")]
+    #[test_case("def_" => "^def.{1}$")]
+    #[test_case("def%" => "^def.*$")]
+    #[test_case("_O__%%___%%%O%" => "^.{1}O_%_.{1}%.*O.*$")]
+    fn test_like_pattern_to_regex_pattern(like_pattern: &str) -> String {
+        like_pattern_to_regex_pattern(like_pattern)
+    }
+}
+
 fn dotnet_format_to_strptime_format(dotnet_format: &str) -> String {
     lazy_static! {
         static ref REPLACEMENTS: [(Regex, &'static str); 46] = [
@@ -1196,30 +1238,6 @@ fn dotnet_format_to_strptime_format(dotnet_format: &str) -> String {
     });
 
     result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use test_case::test_case;
-
-    #[test_case("yyyy-MM-dd HH:mm:ss.fff" => "%Y-%m-%d %H:%M:%S.%3f")]
-    fn test_dotnet_format_to_strptime_format(dotnet_format: &str) -> String {
-        dotnet_format_to_strptime_format(dotnet_format)
-    }
-
-    #[test_case("abcd" => "^abcd$")]
-    #[test_case("a_cd" => "^a.{1}cd$")]
-    #[test_case("ab%d" => "^ab.*d$")]
-    #[test_case("ab%%cd" => "^ab%cd$")]
-    #[test_case("_abc" => "^.{1}abc$")]
-    #[test_case("%abc" => "^.*abc$")]
-    #[test_case("def_" => "^def.{1}$")]
-    #[test_case("def%" => "^def.*$")]
-    #[test_case("_O__%%___%%%O%" => "^.{1}O_%_.{1}%.*O.*$")]
-    fn test_like_pattern_to_regex_pattern(like_pattern: &str) -> String {
-        like_pattern_to_regex_pattern(like_pattern)
-    }
 }
 
 // Could be replaced by ? https://github.com/chronotope/chrono-tz/
@@ -1376,3 +1394,20 @@ fn get_utc_offset(time_zone_name: &str) -> Result<&'static FixedOffset, String> 
         Err(format!("Unable to find a time zone named '{}'", time_zone_name))
     }
 }
+
+/*
+
+  #region DateTime
+
+        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
+        public static Result Today() => new Result(() => DateTime.UtcNow.Date);
+
+        [ExpressionFunction(DateCatName, IsNondeterministic = true)]
+        public static Result Time() => new Result(() => DateTime.UtcNow.TimeOfDay);
+
+
+
+        #endregion
+
+
+*/
