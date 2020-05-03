@@ -602,7 +602,7 @@ fn f_first_sentence(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
         let position = s.chars().position(|c| is_sentence_punctuation(c));
         match position {
             None => Ok(ExprResult::Str(s)),
-            Some(i) => Ok(ExprResult::Str(format!("{}", &s[..i]))),
+            Some(i) => Ok(ExprResult::Str(format!("{}", &s[..i + 1]))),
         }
     })
 }
@@ -610,7 +610,27 @@ fn f_first_sentence(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 // Capitalize
 fn f_capitalize(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "Capitalize", |s| {
-        todo!();
+        let (_, result) = s.chars().into_iter().fold((true, String::with_capacity(s.capacity())), |state, c| {
+            let (should_capitalize, mut s) = state;
+            match (should_capitalize, is_sentence_punctuation(c), is_space(c)) {
+                (false, end_sentence, _) => {
+                    s.push(c);
+                    (should_capitalize || end_sentence, s)
+                }
+                (true, _, true) => {
+                    s.push(c);
+                    (should_capitalize, s)
+                }
+                (true, _, false) => {
+                    for u in c.to_uppercase() {
+                        s.push(u);
+                    }
+                    (false, s)
+                }
+            }
+        });
+
+        Ok(ExprResult::Str(result))
     })
 }
 
