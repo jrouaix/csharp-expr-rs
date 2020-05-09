@@ -24,12 +24,12 @@ namespace csharp_expr_rs.Tests
             {
                 Console.SetOut(sw);
 
-                var expression = new Expression("first(1,2,3)");
+                var expression = new Expression("Concat(1,2,3)");
                 try
                 {
                     var result = expression.Execute(new Dictionary<string, string>());
                     _output.WriteLine(result);
-                    result.ShouldBe("1");
+                    result.ShouldBe("123");
                 }
                 finally
                 {

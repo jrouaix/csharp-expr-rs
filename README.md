@@ -26,7 +26,8 @@ c# expression parser in Rust
 - [x] Handle `null` value (just in case)
 - [x] Debug ` ` white space and tabs in strings are still strings
 - [x] Segregate Expr & ExprResult enum types
-- [ ] Implement existing functions in BZP system & compare performances
+- [x] Implement existing functions in BZP system
+- [ ] Case insensitive function names
 - [ ] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
 - [X] Implement Sql Like function
 - [ ] Handle functions determinism
@@ -39,7 +40,6 @@ c# expression parser in Rust
 - [ ] Error handling on expressions parsing
 - [ ] Result/Error handling on FFI for expressions execution
 - [ ] Modularisation, so anyone can implement their own functions list
-- [ ] Case insensitive function names
 - [ ] Handle Assoc/Binary operators
 - [ ] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate : https://crates.io/crates/rust_decimal ?)
 - [ ] Publish on crates.io

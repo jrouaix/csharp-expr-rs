@@ -46,22 +46,31 @@ namespace csharp_expr_rs
                     );
         }
 
-        public string Execute(Dictionary<string, string> identifierValues)
+        public string[] Identifiers => _identifiers.ToArray();
+
+        readonly FFIIdentifierKeyValue[] _emptyValues = new FFIIdentifierKeyValue[0];
+
+        public string Execute(IReadOnlyDictionary<string, string> identifierValues)
+            => Execute((IEnumerable<KeyValuePair<string, string>>)identifierValues);
+
+        public string Execute(IEnumerable<KeyValuePair<string, string>> identifierValues)
         {
             unsafe
             {
-                var idValues = identifierValues
-                    .Where(kv => _identifiers.Contains(kv.Key))
-                    .Select(kv =>
-                    {
-                        var str = kv.Value;
-                        var len = (UIntPtr)(str.Length * sizeof(char));
-                        fixed (char* ptr = str)
+                var idValues = identifierValues == null
+                    ? _emptyValues
+                    : identifierValues
+                        .Where(kv => _identifiers.Contains(kv.Key))
+                        .Select(kv =>
                         {
-                            return new FFIIdentifierKeyValue { key = kv.Key, value = new FFICSharpString { ptr = ptr, len = len } };
-                        }
-                    })
-                    .ToArray();
+                            var str = kv.Value;
+                            var len = (UIntPtr)(str.Length * sizeof(char));
+                            fixed (char* ptr = str)
+                            {
+                                return new FFIIdentifierKeyValue { key = kv.Key, value = new FFICSharpString { ptr = ptr, len = len } };
+                            }
+                        })
+                        .ToArray();
 
                 string result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length)
                     .AsStringAndDispose();
