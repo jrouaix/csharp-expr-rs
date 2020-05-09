@@ -27,13 +27,14 @@ c# expression parser in Rust
 - [x] Debug ` ` white space and tabs in strings are still strings
 - [x] Segregate Expr & ExprResult enum types
 - [x] Implement existing functions in BZP system
-- [ ] Case insensitive function names
+- [x] Case insensitive function names ... and identifier names
 - [ ] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
 - [X] Implement Sql Like function
 - [ ] Handle functions determinism
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [ ] Make all default String lazy static or &str
 - [ ] Debug empty string parsing
+- [ ] Debug empty parameters list parsing (it's parsed as identifier right now) 
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/

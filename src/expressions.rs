@@ -8,15 +8,16 @@ use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
+use unicase::UniCase;
 
 pub type RcExpr = Rc<Expr>;
 pub type VecRcExpr = Vec<RcExpr>;
 pub type SliceRcExpr = [RcExpr];
 pub type ExprFuncResult = Result<ExprResult, String>;
 pub type FunctionImpl = dyn Fn(&VecRcExpr, &IdentifierValues) -> ExprFuncResult;
-pub type FunctionImplList = HashMap<String, Rc<FunctionImpl>>;
+pub type FunctionImplList = HashMap<UniCase<String>, Rc<FunctionImpl>>;
 pub type IdentifierValueGetter = dyn Fn() -> String;
-pub type IdentifierValues = HashMap<String, Box<IdentifierValueGetter>>;
+pub type IdentifierValues = HashMap<UniCase<String>, Box<IdentifierValueGetter>>;
 
 pub type ExprDecimal = f64;
 
@@ -163,7 +164,7 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
             identifiers.insert(name.clone());
             expr
         }
-        Expr::FunctionCall(name, parameters) => match &funcs.get(name) {
+        Expr::FunctionCall(name, parameters) => match &funcs.get(&UniCase::new(name.into())) {
             Some(fnc) => Rc::new(Expr::PreparedFunctionCall(
                 name.clone(),
                 prepare_expr_list(parameters, funcs, identifiers),
@@ -183,7 +184,7 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<E
         Expr::Num(f) => Ok(ExprResult::Num(*f)),
         Expr::Null => Ok(ExprResult::Null),
         Expr::Array(_) => Ok(ExprResult::NonExecuted(expr.clone())),
-        Expr::Identifier(name) => match &values.get(name) {
+        Expr::Identifier(name) => match &values.get(&UniCase::new(name.into())) {
             Some(s) => Ok(ExprResult::Str(s())),
             None => Err(format!("Unable to find value for identifier named '{}'", name)),
         },
@@ -334,7 +335,7 @@ mod tests {
         let expr = parse_expr(expression).unwrap();
         let mut funcs = FunctionImplList::new();
         funcs.insert(
-            "knownFunc".to_string(),
+            UniCase::new("knownFunc".to_string()),
             Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42_f64))),
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs);
@@ -348,7 +349,7 @@ mod tests {
     fn execute_one_expression() {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
-            "first".to_string(),
+            UniCase::new("first".to_string()),
             Rc::new(|v: &VecRcExpr, _: &IdentifierValues| {
                 v.first().map_or_else(
                     || Err("There was no first value.".to_string()),
@@ -358,25 +359,26 @@ mod tests {
         );
 
         funcs.insert(
-            "forty_two".to_string(),
+            UniCase::new("forty_two".to_string()),
             Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42_f64))),
         );
         funcs.insert(
-            "forty_two_str".to_string(),
+            UniCase::new("forty_two_str".to_string()),
             Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_str!("42".to_string()))),
         );
 
         let mut values = IdentifierValues::new();
         values.insert("my".into(), Box::new(|| "value".to_string()));
 
-        let expression = "first(first(first(my,2,3),2,3),2,3)";
+        let expression = "first(fiRst(FIRST(my,2,3),2,3),2,3)";
         let result = parse_exec_expr(expression, &funcs, &values);
         assert_eq!(result, "value");
         println!("{:?}", result);
     }
 
     // #[test_case("Exact(null, \"\")" => "true")] // to debug
-    #[test_case("Exact(null, Concat(null, null))" => "true")]
+    #[test_case("eXaCt(null, Concat(null, null))" => "true")]
+    #[test_case("Exact(\"null\", \"null\")" => "true")]
     #[test_case(stringify!("test") => "test")]
     #[test_case("IsNull(null)" => "true")]
     #[test_case("IsNull(IsBlank(null))" => "false")]

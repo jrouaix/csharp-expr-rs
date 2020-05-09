@@ -7,6 +7,7 @@ use std::os::raw::c_char;
 use std::rc::Rc;
 use std::slice;
 use std::vec::Vec;
+use unicase::UniCase;
 
 fn str_from_c_char_ptr<'a>(s: *const c_char) -> &'a str {
     unsafe {
@@ -89,7 +90,7 @@ extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *co
     for ikv in vals.iter() {
         let k = string_from_c_char_ptr(ikv.key);
         let get_v = Box::new(move || string_from_csharp_string_ptr(ikv.value));
-        values.insert(k, get_v);
+        values.insert(UniCase::new(k), get_v);
     }
 
     let result = exec_expr(&expr.expr, &values).unwrap();
