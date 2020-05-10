@@ -28,8 +28,8 @@ namespace csharp_expr_rs.Tests
                 try
                 {
                     var result = expression.Execute(new Dictionary<string, string>());
-                    _output.WriteLine(result);
-                    result.ShouldBe("123");
+                    _output.WriteLine(result.content);
+                    result.content.ShouldBe("123");
                 }
                 finally
                 {
@@ -51,11 +51,11 @@ namespace csharp_expr_rs.Tests
                 try
                 {
                     var result = expression.Execute(new Dictionary<string, string>() { { "test", "42" } });
-                    _output.WriteLine(result);
-                    result.ShouldBe("42");
+                    _output.WriteLine(result.content);
+                    result.content.ShouldBe("42");
 
                     result = expression.Execute(new Dictionary<string, string>() { { "test", "43" } });
-                    result.ShouldBe("43");
+                    result.content.ShouldBe("43");
                 }
                 finally
                 {
@@ -81,7 +81,7 @@ namespace csharp_expr_rs.Tests
                     try
                     {
                         var result = expression.Execute(identifierValues);
-                        result.ShouldBe(s);
+                        result.content.ShouldBe(s);
                     }
                     finally
                     {

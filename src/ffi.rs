@@ -6,7 +6,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::rc::Rc;
 use std::slice;
-use std::vec::Vec;
+use std::{cell::RefCell, vec::Vec};
 use unicase::UniCase;
 
 fn str_from_c_char_ptr<'a>(s: *const c_char) -> &'a str {
@@ -74,6 +74,31 @@ pub struct FFICSharpString {
     len: usize,
 }
 
+// #[repr(C)]
+// #[derive(Debug, Copy, Clone)]
+// pub struct FFIExecResult {
+//     is_error: bool,
+//     content: *mut c_char,
+// }
+
+// https://michael-f-bryan.github.io/rust-ffi-guide/errors/return_types.html#return-types
+// https://blog.datalust.co/rust-at-datalust-how-we-integrate-rust-with-csharp/
+
+thread_local! {
+    static LAST_ERROR: RefCell<bool> = RefCell::new(false);
+}
+/// Update the most recent error, clearing whatever may have been there before.
+pub fn set_last_is_error(b: bool) {
+    LAST_ERROR.with(|prev| {
+        *prev.borrow_mut() = b;
+    });
+}
+/// Retrieve the most recent error, clearing it in the process.
+#[no_mangle]
+extern "C" fn get_last_is_error() -> bool {
+    LAST_ERROR.with(|v| *v.borrow())
+}
+
 #[no_mangle]
 extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *const IdentifierKeyValue, identifier_values_len: usize) -> *mut c_char {
     let expr = unsafe {
@@ -93,10 +118,21 @@ extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *co
         values.insert(UniCase::new(k), get_v);
     }
 
-    let result = exec_expr(&expr.expr, &values).unwrap();
-    let s_result = result.to_string();
-    let c_str_result = CString::new(s_result).unwrap();
-    c_str_result.into_raw()
+    let result = exec_expr(&expr.expr, &values);
+
+    match result {
+        Err(e) => {
+            let c_str_result = CString::new(e).unwrap();
+            set_last_is_error(true);
+            c_str_result.into_raw()
+        }
+        Ok(r) => {
+            let s_result = r.to_string();
+            let c_str_result = CString::new(s_result).unwrap();
+            set_last_is_error(false);
+            c_str_result.into_raw()
+        }
+    }
 }
 
 #[no_mangle]

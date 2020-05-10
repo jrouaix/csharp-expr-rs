@@ -377,10 +377,13 @@ mod tests {
     }
 
     // #[test_case("Exact(null, \"\")" => "true")] // to debug
+    #[test_case("null" => "")]
     #[test_case("eXaCt(null, Concat(null, null))" => "true")]
     #[test_case("Exact(\"null\", \"null\")" => "true")]
     #[test_case(stringify!("test") => "test")]
     #[test_case("IsNull(null)" => "true")]
+    #[test_case("IsNull(\" \t \")" => "true")]
+    #[test_case("isnull([test])" => "false")]
     #[test_case("IsNull(IsBlank(null))" => "false")]
     #[test_case("AreEquals(IsBlank(null), IsNull(null))" => "true")]
     #[test_case("AreEquals(IsBlank(42), IsNull(null))" => "false")]

@@ -50,10 +50,10 @@ namespace csharp_expr_rs
 
         readonly FFIIdentifierKeyValue[] _emptyValues = new FFIIdentifierKeyValue[0];
 
-        public string Execute(IReadOnlyDictionary<string, string> identifierValues)
+        public (bool is_error, string content) Execute(IReadOnlyDictionary<string, string> identifierValues)
             => Execute((IEnumerable<KeyValuePair<string, string>>)identifierValues);
 
-        public string Execute(IEnumerable<KeyValuePair<string, string>> identifierValues)
+        public (bool is_error, string content) Execute(IEnumerable<KeyValuePair<string, string>> identifierValues)
         {
             unsafe
             {
@@ -72,10 +72,9 @@ namespace csharp_expr_rs
                         })
                         .ToArray();
 
-                string result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length)
-                    .AsStringAndDispose();
+                var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length).AsStringAndDispose();
 
-                return result;
+                return (Native.get_last_is_error(), result);
             }
         }
 

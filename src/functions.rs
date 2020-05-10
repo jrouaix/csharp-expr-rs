@@ -20,7 +20,12 @@ fn exec_vec_is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<boo
 
 fn exec_expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
     let res = exec_expr(expr, values)?;
-    Ok(if let ExprResult::Null = res { true } else { false })
+    let is_null = match res {
+        ExprResult::Null => true,
+        ExprResult::Str(s) => s.len() == 0 || s.chars().all(|c| is_space(c)),
+        _ => false,
+    };
+    Ok(is_null)
 }
 
 fn results_are_equals(left: &ExprResult, right: &ExprResult) -> bool {

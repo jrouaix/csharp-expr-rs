@@ -21,6 +21,8 @@ namespace csharp_expr_rs
         [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
         public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]
+        public static extern bool get_last_is_error();
+        [DllImport(LIB_NAME)]
         public static extern void ffi_free_cstring(IntPtr ptr);
 
         [DllImport(LIB_NAME)]
@@ -40,6 +42,14 @@ namespace csharp_expr_rs
         public char* ptr;
         public UIntPtr len;
     }
+
+    //[StructLayout(LayoutKind.Sequential)]
+    //internal unsafe struct FFIExecResult
+    //{
+    //    public bool is_error;
+    //    public FFIStringHandle content;
+    //}
+
 
     internal class FFIStringHandle : SafeHandle
     {
