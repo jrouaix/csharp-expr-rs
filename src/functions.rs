@@ -20,12 +20,15 @@ fn exec_vec_is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<boo
 
 fn exec_expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
     let res = exec_expr(expr, values)?;
-    let is_null = match res {
+    Ok(expr_result_is_null(&res))
+}
+
+fn expr_result_is_null(result: &ExprResult) -> bool {
+    match result {
         ExprResult::Null => true,
         ExprResult::Str(s) => s.len() == 0 || s.chars().all(|c| is_space(c)),
         _ => false,
-    };
-    Ok(is_null)
+    }
 }
 
 fn results_are_equals(left: &ExprResult, right: &ExprResult) -> bool {
@@ -411,9 +414,8 @@ fn f_is_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for p in params.iter() {
         let p_result = exec_expr(p, values)?;
-        match p_result {
-            ExprResult::Null => {}
-            _ => return Ok(p_result),
+        if !expr_result_is_null(&p_result) {
+            return Ok(p_result);
         }
     }
     Ok(ExprResult::Null)
@@ -537,8 +539,11 @@ fn f_right(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 fn f_mid(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 3, "Mid")?;
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
-    let false_position = exec_expr_to_int(params.get(1).unwrap(), values)?.max(1).min(s.len() as isize);
+    let false_position = exec_expr_to_int(params.get(1).unwrap(), values)?.max(1);
     let position = (false_position - 1) as usize;
+    if position >= s.len() {
+        return Ok(ExprResult::Str("".to_string()));
+    }
     let size = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
     if size == 0 {
         Ok(ExprResult::Str("".to_string()))

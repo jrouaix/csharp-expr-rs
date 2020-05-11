@@ -1,25 +1,22 @@
 use crate::expressions::*;
 
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, vec::Vec};
 use unicase::UniCase;
 
-fn str_from_c_char_ptr<'a>(s: *const c_char) -> &'a str {
+fn str_from_c_char_ptr<'a>(s: *const c_char) -> Result<&'a str, std::str::Utf8Error> {
     unsafe {
         assert!(!s.is_null());
         CStr::from_ptr(s)
     }
     .to_str()
-    .unwrap()
 }
 
-fn string_from_c_char_ptr(s: *const c_char) -> String {
-    str_from_c_char_ptr(s).to_string()
+fn string_from_c_char_ptr(s: *const c_char) -> Result<String, std::str::Utf8Error> {
+    Ok(str_from_c_char_ptr(s)?.to_string())
 }
 
 static UTF16: Lazy<&'static encoding_rs::Encoding> = Lazy::new(|| {
@@ -32,15 +29,16 @@ fn string_from_csharp_string_ptr(s: FFICSharpString) -> String {
         let slice = slice::from_raw_parts(s.ptr, s.len);
         let mut decoder = UTF16.new_decoder();
         let mut utf8 = String::with_capacity(s.len);
-        let recode_result = decoder.decode_to_string(slice, &mut utf8, true);
+        decoder.decode_to_string(slice, &mut utf8, true);
         utf8
     }
 }
 
 #[no_mangle]
-extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> *mut ExprAndIdentifiers {
-    let r_str = str_from_c_char_ptr(expression);
-    let expr = parse_expr(r_str).unwrap();
+extern "C" fn ffi_parse_and_prepare_expr(expression: FFICSharpString) -> *mut ExprAndIdentifiers {
+    let r_str = string_from_csharp_string_ptr(expression);
+    println!("{}", r_str);
+    let expr = parse_expr(&r_str).unwrap();
 
     let funcs = crate::functions::get_functions();
 
@@ -113,7 +111,7 @@ extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *co
 
     let mut values = IdentifierValues::new();
     for ikv in vals.iter() {
-        let k = string_from_c_char_ptr(ikv.key);
+        let k = string_from_c_char_ptr(ikv.key).unwrap();
         let get_v = Box::new(move || string_from_csharp_string_ptr(ikv.value));
         values.insert(UniCase::new(k), get_v);
     }

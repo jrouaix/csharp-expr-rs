@@ -26,10 +26,11 @@ c# expression parser in Rust
 - [x] Handle `null` value (just in case)
 - [x] Debug ` ` white space and tabs in strings are still strings
 - [x] Segregate Expr & ExprResult enum types
-- [X] Implement Sql Like function
+- [x] Implement Sql Like function
 - [x] Implement existing functions in BZP system
 - [x] Case insensitive function names ... and identifier names
 - [/] Result/Error handling on FFI for expressions execution
+- [x] Handle (good enough) non ascii strings
 - [ ] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
 - [ ] Handle functions determinism
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors

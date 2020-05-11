@@ -2,7 +2,7 @@ use crate::expressions::*;
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_a, is_not, tag, take_while}, // escaped_transform
+    bytes::complete::{escaped, is_a, is_not, tag, take_while, take_while1}, // escaped_transform
     character::complete::{alphanumeric0, alphanumeric1, anychar, char, one_of},
     combinator::{cut, map, map_opt, not, opt, recognize},
     error::{context, ParseError},
@@ -29,26 +29,45 @@ fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E
     take_while(|c| " \t\r\n".contains(c))(input)
 }
 
-/// string interior combinator
-fn str_content<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    // alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
-    // WORKING
-    let white_spaces = alt((tag(" "), tag("\t"), tag("_"), tag("-")));
-    let punctuation = alt((tag("."), tag(","), tag(":"), tag("!"), tag("?"), tag("¿"), tag("%"))); // a lot more ! to debug
-                                                                                                   // let white_spaces = is_a("&é'(-è_çà@^`|([{~}])");
-    escaped(alt((alphanumeric1, white_spaces, punctuation)), '\\', one_of("\\\"rnt"))(input)
+// /// string interior combinator
+// fn str_content<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+//     // alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
 
-    // TRY 1
-    // escaped(anychar, '\\', one_of("\\\"rnt"))(input)
-    // TRY 2
-    // escaped(take_while(|c| c != '"'), '\\', one_of("\\\"rnt"))(input)
-    // TRY 3
-    // escaped(not(char('"')), '\\', one_of("\\\"rnt"))(input)
+//     // // WORKING
+//     let white_spaces = alt((tag(" "), tag("\t"), tag("_"), tag("-")));
+//     let punctuation = alt((tag("."), tag(","), tag(":"), tag("!"), tag("?"), tag("¿"), tag("%"))); // a lot more ! to debug
+
+//     // let white_spaces = is_a("&é'(-è_çà@^`|([{~}])");
+//     escaped(alt((alphanumeric1, white_spaces, punctuation)), '\\', one_of("\\\"rnt"))(input)
+
+//     // TRY 1 => panics a lot
+//     // escaped(anychar, '\\', one_of("\\\"rnt"))(input)
+//     // TRY 2 => 100% CPU
+//     // escaped(take_while(|c| c != '"'), '\\', one_of("\\\"rnt"))(input)
+//     // TRY 3 => 100% CPU
+//     // escaped(not(char('"')), '\\', one_of("\\\"rnt"))(input)
+// }
+
+// /// full string combinator
+// fn stringU<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+//     context("string", preceded(char('\"'), cut(terminated(str_content, char('\"')))))(input)
+// }
+
+// string parser from here : https://github.com/Geal/nom/issues/1075
+
+fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+    escaped(
+        take_while1(|c| c != '\\' && c != '"'),
+        '\\',
+        one_of("\"\\/bfnrtu"), // Note, this will not detect invalid unicode escapes.
+    )(i)
 }
 
-/// full string combinator
-fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("string", preceded(char('\"'), cut(terminated(str_content, char('\"')))))(input)
+fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+    context(
+        "string",
+        preceded(char('\"'), cut(terminated(map(opt(parse_str), |o| o.unwrap_or_default()), char('\"')))),
+    )(i)
 }
 
 /// boolean combinator

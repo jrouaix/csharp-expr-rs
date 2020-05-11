@@ -428,6 +428,7 @@ mod tests {
     #[test_case("Fixed(3.1416, 5)" => "3.14160")]
     #[test_case("Fixed(31416, 0, true)" => "31416")]
     #[test_case("Fixed(31416, 0, false)" => "31,416")]
+    #[test_case("Fixed(31416, 0)" => "31416")]
     #[test_case("Fixed(31415926.5359, 3, false)" => "31,415,926.536")]
     #[test_case("Fixed(0.42, 3, false)" => "0.420")]
     #[test_case("Left(\"Left\", 2)" => "Le")]
@@ -438,6 +439,9 @@ mod tests {
     #[test_case("Mid(\"Mid\", 1, 1)" => "M")]
     #[test_case("Mid(\"Mid\", 0, 2)" => "Mi")]
     #[test_case("Mid(\"Mid\", 3, 15)" => "d")]
+    #[test_case("Mid(\"bcatag\", 2, 3)" => "cat")]
+    #[test_case("Mid(\"bcatag\", 6, 3)" => "g")]
+    #[test_case("Mid(\"bcatag\", 7, 3)" => "")]
     #[test_case("Len(null)" => "0")]
     #[test_case("Len(\" \")" => "1")]
     #[test_case("Len(\"12\")" => "2")]
@@ -568,6 +572,16 @@ mod tests {
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
         parse_exec_expr(expression, &funcs, &IdentifierValues::new())
+    }
+
+    #[test]
+    fn non_ascii_test() {
+        let expr = "Substitute(\"ta mère !\", \"mère !\", \"frêre ?\")";
+        assert_eq!(parse_exec_expr_with_defaults(expr), "ta frêre ?");
+    }
+
+    fn parse_exec_expr_with_defaults<'a>(expression: &'a str) -> String {
+        parse_exec_expr(expression, &get_functions(), &IdentifierValues::new())
     }
 
     fn parse_exec_expr<'a>(expression: &'a str, funcs: &FunctionImplList, values: &IdentifierValues) -> String {

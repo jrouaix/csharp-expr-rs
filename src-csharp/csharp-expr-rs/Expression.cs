@@ -5,20 +5,28 @@ using System.Text;
 
 namespace csharp_expr_rs
 {
+    static class StringExtensions
+    {
+        public static FFICSharpString MakeFFICSharpString(this string str)
+        {
+            unsafe
+            {
+                fixed (char* ptr = str)
+                {
+                    var len = (UIntPtr)(str.Length * sizeof(char));
+                    var sharpString = new FFICSharpString { ptr = ptr, len = len };
+                    return sharpString;
+                }
+            }
+        }
+    }
+
     public class SomeTest
     {
         public void Test()
         {
-            unsafe
-            {
-                var str = "test";
+            Native.ffi_test("test".MakeFFICSharpString()).AsStringAndDispose();
 
-                fixed (char* ptr = str)
-                {
-                    var len = (UIntPtr)(str.Length * sizeof(char));
-                    Native.ffi_test(new FFICSharpString { ptr = ptr, len = len }).AsStringAndDispose();
-                }
-            }
             //var pCh1 = test.GetPinnableReference();
             //byte* pc = (byte*)&pCh1;
         }
@@ -33,7 +41,7 @@ namespace csharp_expr_rs
         private readonly HashSet<string> _identifiers;
 
         public Expression(string expression)
-            : this(Native.ffi_parse_and_prepare_expr(expression))
+            : this(Native.ffi_parse_and_prepare_expr(expression.MakeFFICSharpString()))
         { }
 
         internal Expression(FFIExpressionHandle expressionFFIPointer)
@@ -61,15 +69,7 @@ namespace csharp_expr_rs
                     ? _emptyValues
                     : identifierValues
                         .Where(kv => _identifiers.Contains(kv.Key))
-                        .Select(kv =>
-                        {
-                            var str = kv.Value;
-                            var len = (UIntPtr)(str.Length * sizeof(char));
-                            fixed (char* ptr = str)
-                            {
-                                return new FFIIdentifierKeyValue { key = kv.Key, value = new FFICSharpString { ptr = ptr, len = len } };
-                            }
-                        })
+                        .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value.MakeFFICSharpString() })
                         .ToArray();
 
                 var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length).AsStringAndDispose();
