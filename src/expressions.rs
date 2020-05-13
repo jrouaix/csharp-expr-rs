@@ -114,6 +114,10 @@ impl Display for Expr {
     }
 }
 
+const SECONDS_IN_MIN: i64 = 60;
+const SECONDS_IN_HOURS: i64 = SECONDS_IN_MIN * 60;
+const SECONDS_IN_DAYS: i64 = SECONDS_IN_HOURS * 24;
+
 impl Display for ExprResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -121,7 +125,21 @@ impl Display for ExprResult {
             ExprResult::Boolean(b) => write!(f, "{}", b),
             ExprResult::Num(n) => write!(f, "{}", n),
             ExprResult::Date(d) => write!(f, "{}", d),
-            ExprResult::TimeSpan(d) => write!(f, "{}", d),
+            ExprResult::TimeSpan(d) => {
+                let sign = if *d < Duration::zero() { "-" } else { "" };
+                let mut secs = d.num_seconds().abs();
+                let days = secs / SECONDS_IN_DAYS;
+                secs = secs - days * SECONDS_IN_DAYS;
+                let hours = secs / SECONDS_IN_HOURS;
+                secs = secs - hours * SECONDS_IN_HOURS;
+                let mins = secs / SECONDS_IN_MIN;
+                secs = secs - mins * SECONDS_IN_MIN;
+                if days > 0 {
+                    write!(f, "{}{}.{:02}:{:02}:{:02}", sign, days, hours, mins, secs)
+                } else {
+                    write!(f, "{}{:02}:{:02}:{:02}", sign, hours, mins, secs)
+                }
+            }
             ExprResult::Null => write!(f, ""),
             ExprResult::NonExecuted(rc_expr) => write!(f, "{}", rc_expr),
         }
@@ -548,13 +566,15 @@ mod tests {
     #[test_case("Date(\"1996-12-19T16:39:57-08:00\")" => "1996-12-20 00:39:57")]
     #[test_case("Date(\"1996-12-07T16:39:57Z\")" => "1996-12-07 16:39:57")]
     #[test_case("Date(\"1996-12-07 16:39:57\")" => "1996-12-07 16:39:57")]
+    #[test_case("Date(\" 1996/12/07 16:39:58 \")" => "1996-12-07 16:39:58")]
     #[test_case("Date(\"1996-12-07\")" => "1996-12-07 00:00:00")]
     #[test_case("Year(\"1996-12-19T16:39:57-08:00\")" => "1996")]
     #[test_case("Month(\"1996-12-19T16:39:57-08:00\")" => "12")]
     #[test_case("Day(\"1996-12-19T16:39:57-08:00\")" => "20")]
     #[test_case("Day(\"1996-12-07T16:39:57Z\")" => "7")]
-    #[test_case("DateDiff(\"1996-12-07T16:39:57Z\", \"1996-12-07T16:39:57Z\")" => "PT0S")]
-    // #[test_case("DateDiff(\"1995-6-07T16:39:52Z\", \"1996-12-07T16:39:57Z\")" => "-PT5S")]
+    #[test_case("DateDiff(\"1996-12-07T16:39:58Z\", \"1996-12-07T16:39:57Z\")" => "00:00:01")]
+    #[test_case("DateDiff(\"1996-12-07T16:39:57Z\", \"1996-12-02T16:40:52Z\")" => "4.23:59:05")]
+    #[test_case("DateDiff(\"1996-12-07T16:39:57Z\", \"1996-12-09T16:39:57Z\")" => "-2.00:00:00")]
     #[test_case("DateAddHours(Date(\"1996-12-19T16:39:57-08:00\"), -8)" => "1996-12-19 16:39:57")]
     #[test_case("DateAddHours(\"1996-12-19T16:39:57-08:00\", -8.5)" => "1996-12-19 16:09:57")]
     #[test_case("DateAddDays(\"1996-12-19T16:39:57-08:00\", 1.5)" => "1996-12-21 12:39:57")]

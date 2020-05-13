@@ -19,9 +19,9 @@ use unescape::unescape;
 /// `Input -> IResult<Input, Output, Error>`, with `IResult` defined as:
 /// `type IResult<I, O, E = (I, ErrorKind)> = Result<(I, O), Err<E>>;`
 
-fn not_space(s: &str) -> IResult<&str, &str> {
-    is_not(" \t\r\n")(s)
-}
+// fn not_space(s: &str) -> IResult<&str, &str> {
+//     is_not(" \t\r\n")(s)
+// }
 
 /// spaces combinator
 fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {

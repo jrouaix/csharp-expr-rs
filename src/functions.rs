@@ -102,8 +102,45 @@ fn exec_expr_to_date(
     let mut date_time = match &res {
         ExprResult::Date(d) => *d,
         e => {
-            let text = result_to_string(&e)?;
-            text.parse::<DateTime<Utc>>().map_err(|e| format!("{}", e))?.naive_utc()
+            let text = result_to_string(&e)?.trim().to_string();
+            // text.parse::<DateTime<Utc>>().map_err(|e| format!("{}", e))?.naive_utc()
+            match text.parse::<DateTime<Utc>>() {
+                Ok(dt) => return Ok(dt.naive_utc()),
+                Err(err) => {
+                    dbg!("DateTime<Utc> {}", err);
+                }
+            }
+            match DateTime::parse_from_rfc2822(&text) {
+                Ok(dt) => return Ok(dt.naive_utc()),
+                Err(err) => {
+                    dbg!("DateTime::parse_from_rfc2822 {}", err);
+                }
+            }
+            match text.parse::<NaiveDateTime>() {
+                Ok(dt) => return Ok(dt),
+                Err(err) => {
+                    dbg!("NaiveDateTime {}", err);
+                }
+            }
+            match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M:%S") {
+                Ok(dt) => return Ok(dt),
+                Err(err) => {
+                    dbg!("NaiveDateTime::parse_from_str {}", err);
+                }
+            }
+            match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M:%S") {
+                Ok(dt) => return Ok(dt),
+                Err(err) => {
+                    dbg!("NaiveDateTime::parse_from_str2 {}", err);
+                }
+            }
+            match text.parse::<NaiveDate>() {
+                Ok(dt) => return Ok(dt.and_hms(0, 0, 0)),
+                Err(err) => {
+                    dbg!("NaiveDate {}", err);
+                }
+            }
+            Err(format!("Unable to parse '{}' to date", text))?
         }
     };
 
@@ -1051,28 +1088,29 @@ fn f_date_diff(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult 
     two_dates_func_no_defaults(params, values, "DateDiff", |d1, d2| Ok(ExprResult::TimeSpan(d1 - d2)))
 }
 
-const SECONDS_IN_HOURS: ExprDecimal = 60 as ExprDecimal * 60 as ExprDecimal;
-const SECONDS_IN_DAYS: ExprDecimal = SECONDS_IN_HOURS * 24 as ExprDecimal;
-const SECONDS_IN_MONTHS: ExprDecimal = SECONDS_IN_DAYS * 30.5 as ExprDecimal;
+pub const SECONDS_IN_MIN: ExprDecimal = 60 as ExprDecimal;
+pub const SECONDS_IN_HOURS: ExprDecimal = SECONDS_IN_MIN * 60 as ExprDecimal;
+pub const SECONDS_IN_DAYS: ExprDecimal = SECONDS_IN_HOURS * 24 as ExprDecimal;
+pub const SECONDS_IN_MONTHS: ExprDecimal = SECONDS_IN_DAYS * 30.5 as ExprDecimal;
 
 //DateDiffHours
 fn f_date_diff_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffHours", |d1, d2| {
-        Ok(ExprResult::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_HOURS))
+        Ok(ExprResult::Num((d2 - d1).num_seconds() as ExprDecimal / SECONDS_IN_HOURS))
     })
 }
 
 // DateDiffDays
 fn f_date_diff_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffDays", |d1, d2| {
-        Ok(ExprResult::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_DAYS))
+        Ok(ExprResult::Num((d2 - d1).num_seconds() as ExprDecimal / SECONDS_IN_DAYS))
     })
 }
 
 // DateDiffMonths
 fn f_date_diff_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffMonths", |d1, d2| {
-        Ok(ExprResult::Num((d1 - d2).num_seconds() as ExprDecimal / SECONDS_IN_MONTHS))
+        Ok(ExprResult::Num((d2 - d1).num_seconds() as ExprDecimal / SECONDS_IN_MONTHS))
     })
 }
 
