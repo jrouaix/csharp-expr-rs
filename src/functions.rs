@@ -1,21 +1,17 @@
 use crate::expressions::*;
 use chrono::{prelude::*, Duration};
 use num_format::{Locale, ToFormattedString};
-use regex::Captures;
 use regex::{Regex, RegexBuilder};
 use std::collections::HashMap;
 use std::rc::Rc;
 use unicase::UniCase;
 
 fn exec_vec_is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String> {
-    let len = params.len();
-    if len == 0 {
-        return Ok(true);
+    match params.len() {
+        0 => Ok(true),
+        1 => exec_expr_is_null(params.get(0).unwrap(), values),
+        _ => Err("is_null only takes 0 or 1 parameter".to_string()),
     }
-    if len == 1 {
-        return exec_expr_is_null(params.get(0).unwrap(), values);
-    }
-    Err("is_null only takes 0 or 1 parameter".to_string())
 }
 
 fn exec_expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, String> {
@@ -32,15 +28,11 @@ fn expr_result_is_null(result: &ExprResult) -> bool {
 }
 
 fn results_are_equals(left: &ExprResult, right: &ExprResult) -> bool {
-    if let ExprResult::Null = *left {
-        return false;
+    match (left, right) {
+        (ExprResult::Null, _) => false,
+        (_, ExprResult::Null) => false,
+        _ => left == right,
     }
-
-    if let ExprResult::Null = *right {
-        return false;
-    }
-
-    left == right
 }
 
 fn result_to_string(expr: &ExprResult) -> Result<String, String> {
