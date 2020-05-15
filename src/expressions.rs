@@ -4,6 +4,8 @@ use std::fmt::Display;
 use chrono::prelude::*;
 use chrono::Duration;
 use nom::error::ErrorKind;
+use rust_decimal::prelude::*;
+use rust_decimal_macros::*;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -19,7 +21,7 @@ pub type FunctionImplList = HashMap<UniCase<String>, Rc<FunctionImpl>>;
 pub type IdentifierValueGetter = dyn Fn() -> String;
 pub type IdentifierValues = HashMap<UniCase<String>, Box<IdentifierValueGetter>>;
 
-pub type ExprDecimal = f64;
+pub type ExprDecimal = Decimal;
 
 #[repr(C)]
 #[derive(Clone)]
@@ -302,9 +304,9 @@ mod tests {
         }
     }
 
-    #[test_case("1" => Expr::Num(1_f64))]
-    #[test_case("1.2" => Expr::Num(1.2_f64))]
-    #[test_case("-0.42" => Expr::Num(-0.42_f64))]
+    #[test_case("1" => Expr::Num(dec!(1)))]
+    #[test_case("1.2" => Expr::Num(dec!(1.2)))]
+    #[test_case("-0.42" => Expr::Num(dec!(-0.42)))]
     fn parse_num(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
@@ -324,19 +326,19 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("[1,2]" => Expr::Array(vec![rc_expr_num!(1_f64), rc_expr_num!(2_f64)]))]
+    #[test_case("[1,2]" => Expr::Array(vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(2))]))]
     fn parse_array(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1_f64), rc_expr_num!(2_f64)]))]
+    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(2))]))]
     // #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
     #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
     fn parse_function_call(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42_f64), rc_expr_null!()])), rc_expr_num!(2_f64), rc_expr_str!("null".to_string())]))]
+    #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(dec!(42)), rc_expr_null!()])), rc_expr_num!(dec!(2)), rc_expr_str!("null".to_string())]))]
     #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Str("value".to_string()))]))]
     #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Str("va lue".to_string()))]))]
     fn parse_complexe_expressions(expression: &str) -> Expr {
@@ -354,7 +356,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             UniCase::new("knownFunc".to_string()),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42_f64))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42)))),
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs);
         println!("{:?}", expr);
@@ -378,7 +380,7 @@ mod tests {
 
         funcs.insert(
             UniCase::new("forty_two".to_string()),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42_f64))),
+            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42)))),
         );
         funcs.insert(
             UniCase::new("forty_two_str".to_string()),
@@ -435,6 +437,7 @@ mod tests {
     #[test_case("Find(\"C\", \"CCC\", 0)" => "1")]
     #[test_case("Find(\"C\", \"CCC\", 2)" => "2")]
     #[test_case("Find(\"C\", \"CCC\", 3)" => "3")]
+    #[test_case("Find(\"Alpha\", \"Alphabet\")" => "1")]
     #[test_case("Substitute(\"abcEFG\", \"aBC\", \"A\")" => "AEFG")]
     #[test_case("Substitute(\"abcEFG\", \"CCC\", 3)" => "abcEFG")]
     #[test_case("Substitute(\"abababa\", \"a\", null)" => "bbb")]
@@ -444,10 +447,20 @@ mod tests {
     #[test_case("Fixed(3.1416, 2)" => "3.14")]
     #[test_case("Fixed(3.1416, 3)" => "3.142")]
     #[test_case("Fixed(3.1416, 5)" => "3.14160")]
-    #[test_case("Fixed(31416, 0, true)" => "31416")]
+    #[test_case("Fixed(31415926.5359, 0, true)" => "31415927")]
+    #[test_case("Fixed(31415926.5359, 0, false)" => "31,415,927")]
+    #[test_case("Fixed(31415926.5359, 1, true)" => "31415926.5")]
+    #[test_case("Fixed(31415926.5359, 1, false)" => "31,415,926.5")]
+    #[test_case("Fixed(31415926.5359, 2, true)" => "31415926.54")]
+    #[test_case("Fixed(31415926.5359, 2, false)" => "31,415,926.54")]
+    #[test_case("Fixed(31415926.5359, 3, true)" => "31415926.536")]
+    #[test_case("Fixed(31415926.5359, 3, false)" => "31,415,926.536")]
+    #[test_case("Fixed(31415926.5359, 4, true)" => "31415926.5359")]
+    #[test_case("Fixed(31415926.5359, 4, false)" => "31,415,926.5359")]
+    #[test_case("Fixed(31415926.5359, 5, true)" => "31415926.53590")]
+    #[test_case("Fixed(31415926.5359, 5, false)" => "31,415,926.53590")]
     #[test_case("Fixed(31416, 0, false)" => "31,416")]
     #[test_case("Fixed(31416, 0)" => "31416")]
-    #[test_case("Fixed(31415926.5359, 3, false)" => "31,415,926.536")]
     #[test_case("Fixed(0.42, 3, false)" => "0.420")]
     #[test_case("Left(\"Left\", 2)" => "Le")]
     #[test_case("Left(\"Left\", -2)" => "")]

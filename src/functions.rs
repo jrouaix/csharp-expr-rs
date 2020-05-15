@@ -2,6 +2,8 @@ use crate::expressions::*;
 use chrono::{prelude::*, Duration};
 use num_format::{Locale, ToFormattedString};
 use regex::{Regex, RegexBuilder};
+use rust_decimal::prelude::*;
+use rust_decimal_macros::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 use unicase::UniCase;
@@ -57,17 +59,27 @@ fn exec_expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator:
         if let Some(c) = decimal_separator {
             s = s.replace(c, ".")
         }
-        let n: ExprDecimal = s.parse().or_else(|_| Err(format!("'{}' is not a number", s)))?;
+        let n: ExprDecimal = s.parse().or_else(|_| Err(format!("The value '{}' is not a number.", s)))?;
         Ok(n)
     }
 }
 
+fn exec_expr_to_float(expr: &RcExpr, values: &IdentifierValues, decimal_separator: Option<char>) -> Result<f64, String> {
+    let num = exec_expr_to_num(expr, values, decimal_separator)?;
+    num.to_f64().ok_or_else(|| "Error casting value to float.".to_string())
+}
+
+// fn exec_expr_to_int(expr: &RcExpr, values: &IdentifierValues, decimal_separator: Option<char>) -> Result<i64, String> {
+//     let num = exec_expr_to_num(expr, values, decimal_separator)?;
+//     num.to_i64().ok_or_else(|| "Error casting value to integer".to_string())
+// }
+
 fn exec_expr_to_int(expr: &RcExpr, values: &IdentifierValues) -> Result<isize, String> {
     let res = exec_expr(expr, values)?;
     match &res {
-        ExprResult::Num(n) => Ok(*n as isize),
-        ExprResult::Str(s) => Ok(s.parse::<isize>().or_else(|_| Err(format!("'{}' is not a number", s)))?),
-        expr => Err(format!("'{}' is not a number", expr)),
+        ExprResult::Num(n) => Ok(n.to_isize().ok_or_else(|| "Error casting value to integer".to_string())?),
+        ExprResult::Str(s) => Ok(s.parse::<isize>().or_else(|_| Err(format!("The value '{}' is not a number.", s)))?),
+        expr => Err(format!("The value '{}' is not a number.", expr)),
     }
 }
 
@@ -78,9 +90,9 @@ fn exec_expr_to_bool(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, S
     let res = exec_expr(expr, values)?;
     match &res {
         ExprResult::Boolean(b) => Ok(*b),
-        ExprResult::Num(n) => Ok(*n == (1 as ExprDecimal)),
+        ExprResult::Num(n) => Ok(*n == dec!(1)),
         ExprResult::Str(s) => Ok(TRUE_STRING.is_match(&*s)),
-        _ => Err(format!("'{}' is not a boolean", expr)),
+        _ => Ok(false),
     }
 }
 
@@ -140,7 +152,7 @@ fn exec_expr_to_date(
                     dbg!("NaiveDate {}", err);
                 }
             }
-            Err(format!("Unable to parse '{}' to date", text))?
+            Err(format!("The value '{}' is not a date.", text))?
         }
     };
 
@@ -489,7 +501,7 @@ fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
         None => 0,                // 0 for not found
         Some(m) => m.start() + 1, // because it's a Excel function and 1 based enumeration
     };
-    Ok(ExprResult::Num(position as ExprDecimal))
+    Ok(ExprResult::Num(ExprDecimal::from(position)))
 }
 
 // Substitute
@@ -514,18 +526,25 @@ fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
     let decimals = match params.get(1) {
         None => 2,
-        Some(epxr) => exec_expr_to_int(epxr, values)?.max(0) as usize,
+        Some(epxr) => exec_expr_to_int(epxr, values)?.max(0) as u32,
     };
+
+    let number = number.round_dp_with_strategy(decimals, RoundingStrategy::RoundHalfDown);
+
     let no_commas = match params.get(2) {
         None => true,
         Some(epxr) => exec_expr_to_bool(epxr, values)?,
     };
 
     let result = if no_commas {
-        format!("{num:.prec$}", num = number, prec = decimals)
+        format!("{num:.prec$}", num = number, prec = decimals as usize)
     } else {
-        let int = (number.trunc() as isize).to_formatted_string(&Locale::en);
-        let fract = format!("{num:.prec$}", num = number.fract(), prec = decimals);
+        let int = number
+            .trunc()
+            .to_isize()
+            .ok_or_else(|| "integer cast error".to_string())?
+            .to_formatted_string(&Locale::en);
+        let fract = format!("{num:.prec$}", num = number.fract(), prec = decimals as usize);
         let fract: Vec<&str> = fract.split(".").collect();
         let result = match fract.get(1) {
             Some(s) => format!("{}.{}", int, s),
@@ -592,7 +611,7 @@ fn single_string_func<F: FnOnce(String) -> ExprFuncResult>(params: &VecRcExpr, v
 
 // Len
 fn f_len(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_string_func(params, values, "Len", |s| Ok(ExprResult::Num(s.len() as ExprDecimal)))
+    single_string_func(params, values, "Len", |s| Ok(ExprResult::Num(ExprDecimal::from(s.len()))))
 }
 
 // Lower
@@ -869,7 +888,7 @@ fn f_abs(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
 // Product
 fn f_product(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    let mut result = 1 as ExprDecimal;
+    let mut result = ExprDecimal::from(1);
     for expr in params.iter() {
         let i = exec_expr_to_num(expr, values, None)?;
         let intermediate_result = result;
@@ -881,7 +900,7 @@ fn f_product(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
 // Sum
 fn f_sum(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    let mut result = 0 as ExprDecimal;
+    let mut result = ExprDecimal::from(0);
     for expr in params.iter() {
         let i = exec_expr_to_num(expr, values, None)?;
         let intermediate_result = result;
@@ -923,7 +942,7 @@ fn f_round(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Round")?;
     let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let digits = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as u32;
-    let mult_div = (10 as u32).pow(digits) as ExprDecimal;
+    let mult_div = ExprDecimal::from((10 as u32).pow(digits));
     let result = std::panic::catch_unwind(|| (num * mult_div).round() / mult_div)
         .map_err(|_| format!("Couldn't round {} to {} digits", num, digits).to_string())?;
     Ok(ExprResult::Num(result))
@@ -1020,17 +1039,17 @@ fn f_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 
 // Year
 fn f_year(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_date_func(params, values, "Year", |d| Ok(ExprResult::Num(d.year() as ExprDecimal)))
+    single_date_func(params, values, "Year", |d| Ok(ExprResult::Num(ExprDecimal::from(d.year()))))
 }
 
 // Month
 fn f_month(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_date_func(params, values, "Month", |d| Ok(ExprResult::Num(d.month() as ExprDecimal)))
+    single_date_func(params, values, "Month", |d| Ok(ExprResult::Num(ExprDecimal::from(d.month()))))
 }
 
 // Day
 fn f_day(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_date_func(params, values, "Day", |d| Ok(ExprResult::Num(d.day() as ExprDecimal)))
+    single_date_func(params, values, "Day", |d| Ok(ExprResult::Num(ExprDecimal::from(d.day()))))
 }
 
 fn two_dates_func_no_defaults<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(
@@ -1088,29 +1107,32 @@ fn f_date_diff(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult 
     two_dates_func_no_defaults(params, values, "DateDiff", |d1, d2| Ok(ExprResult::TimeSpan(d1 - d2)))
 }
 
-pub const SECONDS_IN_MIN: ExprDecimal = 60 as ExprDecimal;
-pub const SECONDS_IN_HOURS: ExprDecimal = SECONDS_IN_MIN * 60 as ExprDecimal;
-pub const SECONDS_IN_DAYS: ExprDecimal = SECONDS_IN_HOURS * 24 as ExprDecimal;
-pub const SECONDS_IN_MONTHS: ExprDecimal = SECONDS_IN_DAYS * 30.5 as ExprDecimal;
+pub const SECONDS_IN_MIN: i64 = 60;
+pub const SECONDS_IN_HOURS: i64 = SECONDS_IN_MIN * 60;
+pub const SECONDS_IN_DAYS: i64 = SECONDS_IN_HOURS * 24;
+// pub const SECONDS_IN_MONTHS_size: f64 = SECONDS_IN_DAYS as f64 * 30.5_f64;
 
 //DateDiffHours
 fn f_date_diff_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffHours", |d1, d2| {
-        Ok(ExprResult::Num((d2 - d1).num_seconds() as ExprDecimal / SECONDS_IN_HOURS))
+        let hours = ((d1 - d2).num_seconds() / SECONDS_IN_HOURS).abs();
+        Ok(ExprResult::Num(ExprDecimal::from(hours)))
     })
 }
 
 // DateDiffDays
 fn f_date_diff_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffDays", |d1, d2| {
-        Ok(ExprResult::Num((d2 - d1).num_seconds() as ExprDecimal / SECONDS_IN_DAYS))
+        let days = ((d1 - d2).num_seconds() / SECONDS_IN_DAYS).abs();
+        Ok(ExprResult::Num(ExprDecimal::from(days)))
     })
 }
 
 // DateDiffMonths
 fn f_date_diff_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffMonths", |d1, d2| {
-        Ok(ExprResult::Num((d2 - d1).num_seconds() as ExprDecimal / SECONDS_IN_MONTHS))
+        let months = ((d1.month() as i32 - d2.month() as i32) + 12 * (d1.year() - d2.year())).abs();
+        Ok(ExprResult::Num(ExprDecimal::from(months)))
     })
 }
 
@@ -1148,8 +1170,8 @@ fn f_date_greater_or_equals(params: &VecRcExpr, values: &IdentifierValues) -> Ex
 fn f_date_add_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "DateAddHours")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    let hours = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
-    let date_time = date_time + Duration::seconds((hours * SECONDS_IN_HOURS) as i64);
+    let hours = exec_expr_to_float(params.get(1).unwrap(), values, None)?;
+    let date_time = date_time + Duration::seconds((hours * SECONDS_IN_HOURS as f64) as i64);
     Ok(ExprResult::Date(date_time))
 }
 
@@ -1157,8 +1179,8 @@ fn f_date_add_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 fn f_date_add_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "DateAddDays")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    let days = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
-    let date_time = date_time + Duration::seconds((days * SECONDS_IN_DAYS) as i64);
+    let days = exec_expr_to_float(params.get(1).unwrap(), values, None)?;
+    let date_time = date_time + Duration::seconds((days * SECONDS_IN_DAYS as f64) as i64);
     Ok(ExprResult::Date(date_time))
 }
 

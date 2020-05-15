@@ -12,6 +12,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
 };
+use rust_decimal::prelude::FromPrimitive;
 use std::rc::Rc;
 use unescape::unescape;
 
@@ -129,7 +130,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
     preceded(
         sp,
         alt((
-            map(double, Expr::Num),
+            map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             map(null, |_| Expr::Null),
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),

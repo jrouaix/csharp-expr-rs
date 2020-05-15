@@ -72,9 +72,10 @@ namespace csharp_expr_rs
                         .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value.MakeFFICSharpString() })
                         .ToArray();
 
-                var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length).AsStringAndDispose();
+                var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
 
-                return (Native.get_last_is_error(), result);
+                var stringResult = result.GetContent().AsStringAndDispose();
+                return (result.is_error, stringResult);
             }
         }
 

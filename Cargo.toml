@@ -18,7 +18,8 @@ regex = "1"
 num-format = "0.4.0" # when floating point formating will be here : https://github.com/bcmyers/num-format/issues/1
 chrono = "0.4"
 unicase = "2.6.0"
-# https://crates.io/crates/rust_decimal
-
+rust_decimal = "1.5.0"
+rust_decimal_macros = "1.5.0"
+ 
 [dev-dependencies]
 test-case = "1.0.0"

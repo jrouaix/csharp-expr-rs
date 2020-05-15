@@ -30,8 +30,9 @@ c# expression parser in Rust
 - [x] Implement existing functions in BZP system
 - [x] Case insensitive function names ... and identifier names
 - [/] Result/Error handling on FFI for expressions execution
+- [x] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
 - [x] Handle (good enough) non ascii strings
-- [ ] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
+- [x] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate : https://crates.io/crates/rust_decimal ?)
 - [ ] Handle functions determinism
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [ ] Make all default String lazy static or &str
@@ -44,7 +45,6 @@ c# expression parser in Rust
 - [ ] Error handling on expressions parsing
 - [ ] Modularisation, so anyone can implement their own functions list
 - [ ] Handle Assoc/Binary operators
-- [ ] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate : https://crates.io/crates/rust_decimal ?)
 - [ ] Publish on crates.io
 
 

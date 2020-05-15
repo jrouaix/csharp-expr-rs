@@ -72,12 +72,12 @@ pub struct FFICSharpString {
     len: usize,
 }
 
-// #[repr(C)]
-// #[derive(Debug, Copy, Clone)]
-// pub struct FFIExecResult {
-//     is_error: bool,
-//     content: *mut c_char,
-// }
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FFIExecResult {
+    is_error: bool,
+    content: *mut c_char,
+}
 
 // https://michael-f-bryan.github.io/rust-ffi-guide/errors/return_types.html#return-types
 // https://blog.datalust.co/rust-at-datalust-how-we-integrate-rust-with-csharp/
@@ -97,8 +97,29 @@ extern "C" fn get_last_is_error() -> bool {
     LAST_ERROR.with(|v| *v.borrow())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_get_last_is_error() {
+        set_last_is_error(true);
+        assert_eq!(get_last_is_error(), true);
+        set_last_is_error(false);
+        assert_eq!(get_last_is_error(), false);
+        set_last_is_error(true);
+        assert_eq!(get_last_is_error(), true);
+        set_last_is_error(false);
+        assert_eq!(get_last_is_error(), false);
+    }
+}
+
 #[no_mangle]
-extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *const IdentifierKeyValue, identifier_values_len: usize) -> *mut c_char {
+extern "C" fn ffi_exec_expr(
+    ptr: *mut ExprAndIdentifiers,
+    identifier_values: *const IdentifierKeyValue,
+    identifier_values_len: usize,
+) -> FFIExecResult {
     let expr = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
@@ -119,16 +140,20 @@ extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *co
     let result = exec_expr(&expr.expr, &values);
 
     match result {
-        Err(e) => {
-            let c_str_result = CString::new(e).unwrap();
-            set_last_is_error(true);
-            c_str_result.into_raw()
-        }
         Ok(r) => {
             let s_result = r.to_string();
             let c_str_result = CString::new(s_result).unwrap();
-            set_last_is_error(false);
-            c_str_result.into_raw()
+            FFIExecResult {
+                is_error: false,
+                content: c_str_result.into_raw(),
+            }
+        }
+        Err(e) => {
+            let c_str_result = CString::new(e).unwrap();
+            FFIExecResult {
+                is_error: true,
+                content: c_str_result.into_raw(),
+            }
         }
     }
 }

@@ -19,7 +19,7 @@ namespace csharp_expr_rs
         [DllImport(LIB_NAME)]
         public static extern FFIStringHandle ffi_get_identifiers(FFIExpressionHandle ptr);
         [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
-        public static extern FFIStringHandle ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
+        public static extern FFIExecResult ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]
         public static extern bool get_last_is_error();
         [DllImport(LIB_NAME)]
@@ -43,24 +43,29 @@ namespace csharp_expr_rs
         public UIntPtr len;
     }
 
-    //[StructLayout(LayoutKind.Sequential)]
-    //internal unsafe struct FFIExecResult
-    //{
-    //    public bool is_error;
-    //    public FFIStringHandle content;
-    //}
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct FFIExecResult
+    {
+        public bool is_error;
+        public IntPtr content;
+
+
+        public FFIStringHandle GetContent() => new FFIStringHandle(content);
+    }
 
 
     internal class FFIStringHandle : SafeHandle
     {
         public FFIStringHandle() : base(IntPtr.Zero, true) { }
+        public FFIStringHandle(IntPtr intPtr) : base(intPtr, true) { }
 
         public override bool IsInvalid => false;
 
         public string AsString()
         {
             int len = 0;
-            while (Marshal.ReadByte(handle, len) != 0) { ++len; }
+            while (Marshal.ReadByte(handle, len) != 0)
+            { ++len; }
             byte[] buffer = new byte[len];
             Marshal.Copy(handle, buffer, 0, buffer.Length);
             return Encoding.UTF8.GetString(buffer);
