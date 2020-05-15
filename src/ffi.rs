@@ -79,41 +79,6 @@ pub struct FFIExecResult {
     content: *mut c_char,
 }
 
-// https://michael-f-bryan.github.io/rust-ffi-guide/errors/return_types.html#return-types
-// https://blog.datalust.co/rust-at-datalust-how-we-integrate-rust-with-csharp/
-
-thread_local! {
-    static LAST_ERROR: RefCell<bool> = RefCell::new(false);
-}
-/// Update the most recent error, clearing whatever may have been there before.
-pub fn set_last_is_error(b: bool) {
-    LAST_ERROR.with(|prev| {
-        *prev.borrow_mut() = b;
-    });
-}
-/// Retrieve the most recent error, clearing it in the process.
-#[no_mangle]
-extern "C" fn get_last_is_error() -> bool {
-    LAST_ERROR.with(|v| *v.borrow())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn set_get_last_is_error() {
-        set_last_is_error(true);
-        assert_eq!(get_last_is_error(), true);
-        set_last_is_error(false);
-        assert_eq!(get_last_is_error(), false);
-        set_last_is_error(true);
-        assert_eq!(get_last_is_error(), true);
-        set_last_is_error(false);
-        assert_eq!(get_last_is_error(), false);
-    }
-}
-
 #[no_mangle]
 extern "C" fn ffi_exec_expr(
     ptr: *mut ExprAndIdentifiers,
@@ -140,21 +105,14 @@ extern "C" fn ffi_exec_expr(
     let result = exec_expr(&expr.expr, &values);
 
     match result {
-        Ok(r) => {
-            let s_result = r.to_string();
-            let c_str_result = CString::new(s_result).unwrap();
-            FFIExecResult {
-                is_error: false,
-                content: c_str_result.into_raw(),
-            }
-        }
-        Err(e) => {
-            let c_str_result = CString::new(e).unwrap();
-            FFIExecResult {
-                is_error: true,
-                content: c_str_result.into_raw(),
-            }
-        }
+        Ok(r) => FFIExecResult {
+            is_error: false,
+            content: CString::new(r.to_string()).unwrap().into_raw(),
+        },
+        Err(e) => FFIExecResult {
+            is_error: true,
+            content: CString::new(e).unwrap().into_raw(),
+        },
     }
 }
 

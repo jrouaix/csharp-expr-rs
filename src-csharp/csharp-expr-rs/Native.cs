@@ -46,9 +46,9 @@ namespace csharp_expr_rs
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct FFIExecResult
     {
+        [MarshalAs(UnmanagedType.I1)]
         public bool is_error;
         public IntPtr content;
-
 
         public FFIStringHandle GetContent() => new FFIStringHandle(content);
     }
