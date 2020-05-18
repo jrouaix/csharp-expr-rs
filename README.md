@@ -45,6 +45,7 @@ c# expression parser in Rust
 - [ ] Error handling on expressions parsing
 - [ ] Modularisation, so anyone can implement their own functions list
 - [ ] Handle Assoc/Binary operators
+- [ ] Allow passing functions from dotnet side to be called from rust expression ?    // see System.Runtime.InteropServices.AllowReversePInvokeCallsAttribute
 - [ ] Publish on crates.io
 
 

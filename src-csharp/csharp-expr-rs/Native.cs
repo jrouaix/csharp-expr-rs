@@ -48,7 +48,9 @@ namespace csharp_expr_rs
     {
         [MarshalAs(UnmanagedType.I1)]
         public bool is_error;
+        //[MarshalAs(UnmanagedType.SysInt)]
         public IntPtr content;
+
 
         public FFIStringHandle GetContent() => new FFIStringHandle(content);
     }
@@ -95,6 +97,8 @@ namespace csharp_expr_rs
         public FFIExpressionHandle() : base(IntPtr.Zero, true) { }
 
         public override bool IsInvalid => false;
+
+        public IntPtr RawPtr => handle;
 
         protected override bool ReleaseHandle()
         {
