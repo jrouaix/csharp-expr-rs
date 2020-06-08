@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::slice;
-use std::{cell::RefCell, vec::Vec};
+use std::vec::Vec;
 use unicase::UniCase;
 
 fn str_from_c_char_ptr<'a>(s: *const c_char) -> Result<&'a str, std::str::Utf8Error> {
@@ -58,6 +58,19 @@ extern "C" fn ffi_get_identifiers(ptr: *mut ExprAndIdentifiers) -> *mut c_char {
     c_str_result.into_raw()
 }
 
+#[no_mangle]
+extern "C" fn ffi_is_deterministic(ptr: *mut ExprAndIdentifiers) -> bool {
+    let expr = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    match expr.determinism {
+        FunctionDeterminism::Deterministic => true,
+        FunctionDeterminism::NonDeterministic => false,
+    }
+}
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct IdentifierKeyValue {
@@ -80,11 +93,7 @@ pub struct FFIExecResult {
 }
 
 #[no_mangle]
-extern "C" fn ffi_exec_expr(
-    ptr: *mut ExprAndIdentifiers,
-    identifier_values: *const IdentifierKeyValue,
-    identifier_values_len: usize,
-) -> FFIExecResult {
+extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *const IdentifierKeyValue, identifier_values_len: usize) -> FFIExecResult {
     let expr = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr

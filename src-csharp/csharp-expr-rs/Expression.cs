@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 
@@ -51,10 +52,13 @@ namespace csharp_expr_rs
                 Native.ffi_get_identifiers(_expressionHandle)
                     .AsStringAndDispose()
                     .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                    );
+                );
+            Identifiers = _identifiers.ToArray();
+            IsDeterministic = Native.ffi_is_deterministic(_expressionHandle);
         }
 
-        public string[] Identifiers => _identifiers.ToArray();
+        public string[] Identifiers { get; }
+        public bool IsDeterministic { get; }
 
         readonly FFIIdentifierKeyValue[] _emptyValues = new FFIIdentifierKeyValue[0];
 

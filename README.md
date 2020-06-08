@@ -29,15 +29,15 @@ c# expression parser in Rust
 - [x] Implement Sql Like function
 - [x] Implement existing functions in BZP system
 - [x] Case insensitive function names ... and identifier names
-- [/] Result/Error handling on FFI for expressions execution
+- [-] Result/Error handling on FFI for expressions execution
 - [x] Debug strings should be able to contain any character ! see also : https://github.com/Geal/nom/issues/1118 
 - [x] Handle (good enough) non ascii strings
 - [x] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate : https://crates.io/crates/rust_decimal ?)
-- [ ] Handle functions determinism
+- [ ] Debug empty parameters list parsing (it's parsed as identifier right now) 
+- [-] Handle functions determinism
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [ ] Make all default String lazy static or &str
 - [ ] Debug empty string parsing
-- [ ] Debug empty parameters list parsing (it's parsed as identifier right now) 
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Return the right result type throught FFI

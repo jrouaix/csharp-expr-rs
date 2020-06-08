@@ -9,6 +9,8 @@ use rust_decimal_macros::*;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::ops::Add;
+use std::ops::AddAssign;
 use std::rc::Rc;
 use unicase::UniCase;
 
@@ -17,11 +19,41 @@ pub type VecRcExpr = Vec<RcExpr>;
 pub type SliceRcExpr = [RcExpr];
 pub type ExprFuncResult = Result<ExprResult, String>;
 pub type FunctionImpl = dyn Fn(&VecRcExpr, &IdentifierValues) -> ExprFuncResult;
-pub type FunctionImplList = HashMap<UniCase<String>, Rc<FunctionImpl>>;
+pub type FunctionImplList = HashMap<UniCase<String>, (FunctionDeterminism, Rc<FunctionImpl>)>;
 pub type IdentifierValueGetter = dyn Fn() -> String;
 pub type IdentifierValues = HashMap<UniCase<String>, Box<IdentifierValueGetter>>;
 
 pub type ExprDecimal = Decimal;
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum FunctionDeterminism {
+    Deterministic,
+    NonDeterministic,
+}
+
+impl Default for FunctionDeterminism {
+    fn default() -> Self {
+        FunctionDeterminism::Deterministic
+    }
+}
+
+impl Add for FunctionDeterminism {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        match (self, other) {
+            (FunctionDeterminism::Deterministic, FunctionDeterminism::Deterministic) => FunctionDeterminism::Deterministic,
+            _ => FunctionDeterminism::NonDeterministic,
+        }
+    }
+}
+
+impl AddAssign for FunctionDeterminism {
+    fn add_assign(&mut self, other: Self) {
+        *self = *self + other;
+    }
+}
 
 #[repr(C)]
 #[derive(Clone)]
@@ -54,6 +86,7 @@ pub enum ExprResult {
 pub struct ExprAndIdentifiers {
     pub expr: RcExpr,
     pub identifiers_names: HashSet<String>,
+    pub determinism: FunctionDeterminism,
 }
 
 impl fmt::Debug for Expr {
@@ -109,7 +142,7 @@ impl Display for Expr {
             Expr::Num(n) => write!(f, "{}", n),
             Expr::Null => write!(f, ""),
             Expr::Array(_) => write!(f, "Array"),
-            Expr::Identifier(i) => write!(f, "[{}]", i),
+            Expr::Identifier(i) => write!(f, "@{}", i),
             Expr::FunctionCall(_, _) => write!(f, "FunctionCall"),
             Expr::PreparedFunctionCall(_, _, _) => write!(f, "PreparedFunctionCall"),
         }
@@ -167,33 +200,50 @@ pub fn parse_expr(expression: &str) -> Result<Expr, String> {
 
 pub fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList) -> ExprAndIdentifiers {
     let mut identifiers = HashSet::<String>::new();
-    let expr = prepare_expr(Rc::new(expr), funcs, &mut identifiers);
+    let (determinism, expr) = prepare_expr(Rc::new(expr), funcs, &mut identifiers);
     ExprAndIdentifiers {
         expr,
         identifiers_names: identifiers,
+        determinism,
     }
 }
 
-pub fn prepare_expr_list(exprs: &SliceRcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> VecRcExpr {
-    exprs.iter().map(|p| prepare_expr(p.clone(), funcs, identifiers)).collect()
+pub fn prepare_expr_list(exprs: &SliceRcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> (FunctionDeterminism, VecRcExpr) {
+    let mut list = VecRcExpr::with_capacity(exprs.len());
+    let mut total_determinist = FunctionDeterminism::default();
+    for p in exprs.iter() {
+        let (determinism, prepared) = prepare_expr(Rc::clone(p), funcs, identifiers);
+        dbg!(&prepared, determinism);
+        list.push(prepared);
+        total_determinist += determinism;
+    }
+    (total_determinist, list)
 }
 
-pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> RcExpr {
+pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> (FunctionDeterminism, RcExpr) {
     match expr.as_ref() {
         Expr::Identifier(name) => {
             identifiers.insert(name.clone());
-            expr
+            (FunctionDeterminism::Deterministic, expr)
         }
         Expr::FunctionCall(name, parameters) => match &funcs.get(&UniCase::new(name.into())) {
-            Some(fnc) => Rc::new(Expr::PreparedFunctionCall(
-                name.clone(),
-                prepare_expr_list(parameters, funcs, identifiers),
-                Rc::clone(fnc),
-            )),
-            None => expr,
+            Some(fnc) => {
+                let (params_determinism, prepared_list) = prepare_expr_list(parameters, funcs, identifiers);
+                dbg!(name, fnc.0);
+                dbg!(&prepared_list, &params_determinism);
+                (fnc.0 + params_determinism, Rc::new(Expr::PreparedFunctionCall(name.clone(), prepared_list, Rc::clone(&fnc.1))))
+            }
+            None => (FunctionDeterminism::default(), expr),
         },
-        Expr::Array(elements) => Rc::new(Expr::Array(prepare_expr_list(elements, funcs, identifiers))),
-        _ => expr,
+        Expr::Array(elements) => {
+            let (determinism, prepared_list) = prepare_expr_list(elements, funcs, identifiers);
+            (determinism, Rc::new(Expr::Array(prepared_list)))
+        }
+        Expr::Str(_) => (FunctionDeterminism::Deterministic, expr),
+        Expr::Boolean(_) => (FunctionDeterminism::Deterministic, expr),
+        Expr::Num(_) => (FunctionDeterminism::Deterministic, expr),
+        Expr::Null => (FunctionDeterminism::Deterministic, expr),
+        Expr::PreparedFunctionCall(_, _, _) => unreachable!(),
     }
 }
 
@@ -223,6 +273,7 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<E
 
 #[cfg(test)]
 mod tests {
+    use super::FunctionDeterminism::*;
     use super::*;
     use crate::functions::*;
     use test_case::test_case;
@@ -267,9 +318,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_empty_string() { // to debug
-                              // let expr = parse_expr("\"\"").unwrap();
-                              // assert_eq!(expr, Expr::Str("\"\"".to_string()))
+    fn parse_empty_string() {
+        let expr = parse_expr("\"\"").unwrap();
+        assert_eq!(expr, Expr::Str("".to_string()))
     }
 
     #[test]
@@ -332,8 +383,9 @@ mod tests {
     }
 
     #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(2))]))]
-    // #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
+    #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
     #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
+    #[test_case("Test(42)" => Expr::FunctionCall("Test".to_string(), vec![Rc::new(Expr::Num(dec!(42)))]))]
     fn parse_function_call(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
@@ -356,7 +408,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             UniCase::new("knownFunc".to_string()),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42)))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42))))),
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs);
         println!("{:?}", expr);
@@ -370,21 +422,19 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             UniCase::new("first".to_string()),
-            Rc::new(|v: &VecRcExpr, _: &IdentifierValues| {
-                v.first().map_or_else(
-                    || Err("There was no first value.".to_string()),
-                    |x| Ok(ExprResult::NonExecuted(x.clone())),
-                )
-            }),
+            (
+                FunctionDeterminism::Deterministic,
+                Rc::new(|v: &VecRcExpr, _: &IdentifierValues| v.first().map_or_else(|| Err("There was no first value.".to_string()), |x| Ok(ExprResult::NonExecuted(x.clone())))),
+            ),
         );
 
         funcs.insert(
             UniCase::new("forty_two".to_string()),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42)))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42))))),
         );
         funcs.insert(
             UniCase::new("forty_two_str".to_string()),
-            Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_str!("42".to_string()))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_str!("42".to_string())))),
         );
 
         let mut values = IdentifierValues::new();
@@ -625,5 +675,40 @@ mod tests {
         let expr = prepare_expr_and_identifiers(expr, funcs);
         let result = exec_expr(&expr.expr, values).unwrap();
         result.to_string()
+    }
+
+    #[test]
+    fn deterministic_operations() {
+        assert_eq!(Deterministic + Deterministic, Deterministic);
+        assert_eq!(NonDeterministic + Deterministic, NonDeterministic);
+        assert_eq!(Deterministic + NonDeterministic, NonDeterministic);
+        assert_eq!(NonDeterministic + NonDeterministic, NonDeterministic);
+        let mut d = FunctionDeterminism::default();
+        assert_eq!(d, Deterministic);
+        d += Deterministic;
+        assert_eq!(d, Deterministic);
+        d += NonDeterministic;
+        assert_eq!(d, NonDeterministic);
+        d += NonDeterministic;
+        assert_eq!(d, NonDeterministic);
+        d += Deterministic;
+        assert_eq!(d, NonDeterministic);
+        d += Deterministic;
+        assert_eq!(d, NonDeterministic);
+    }
+
+    #[test_case("Substitute(\"ta mere !\", \"mere !\", \"frere ?\")" => true)]
+    #[test_case("Substitute(\"ta mere !\", \"mere !\", Now(42))" => false)]
+    #[test_case("Time(42)" => false)]
+    #[test_case("Upper(Today(42))" => false)]
+    #[test_case("Upper(\"\")" => true)]
+    #[test_case("Upper(Sum(2, 4))" => true)]
+    #[test_case("Upper(Sum(2, now(42)))" => false)]
+    #[test_case("Upper(Unkkkkkknown(2, now(42)))" => true)] // this one will always fail before calling now(), so it's determinist
+    #[test_case("now(42)" => false)]
+    fn deterministic_or_not(expression: &str) -> bool {
+        let expr = parse_expr(expression).unwrap();
+        let expr = prepare_expr_and_identifiers(expr, &get_functions());
+        expr.determinism == Deterministic
     }
 }

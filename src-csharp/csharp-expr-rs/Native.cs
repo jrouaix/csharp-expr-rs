@@ -18,6 +18,9 @@ namespace csharp_expr_rs
 
         [DllImport(LIB_NAME)]
         public static extern FFIStringHandle ffi_get_identifiers(FFIExpressionHandle ptr);
+        [DllImport(LIB_NAME)]
+        public static extern bool ffi_is_deterministic(FFIExpressionHandle ptr);
+
         [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
         public static extern FFIExecResult ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]
@@ -48,13 +51,10 @@ namespace csharp_expr_rs
     {
         [MarshalAs(UnmanagedType.I1)]
         public bool is_error;
-        //[MarshalAs(UnmanagedType.SysInt)]
         public IntPtr content;
-
 
         public FFIStringHandle GetContent() => new FFIStringHandle(content);
     }
-
 
     internal class FFIStringHandle : SafeHandle
     {

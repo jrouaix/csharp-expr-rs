@@ -65,10 +65,7 @@ fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str
 }
 
 fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    context(
-        "string",
-        preceded(char('\"'), cut(terminated(map(opt(parse_str), |o| o.unwrap_or_default()), char('\"')))),
-    )(i)
+    context("string", preceded(char('\"'), cut(terminated(map(opt(parse_str), |o| o.unwrap_or_default()), char('\"')))))(i)
 }
 
 /// boolean combinator
@@ -96,10 +93,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcEx
 }
 
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context(
-        "identifier",
-        preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric0))))),
-    )(input)
+    context("identifier", preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric0))))))(input)
 }
 
 /// parameters between parenthesis

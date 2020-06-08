@@ -216,20 +216,14 @@ fn assert_between_params_count(params: &VecRcExpr, count_min: usize, count_max: 
 
 fn make_case_insensitive_search_regex(search_pattern: &str) -> Result<Regex, String> {
     let search_pattern = regex::escape(&search_pattern);
-    let regex = RegexBuilder::new(&search_pattern)
-        .case_insensitive(true)
-        .build()
-        .map_err(|e| format!("{}", e))?;
+    let regex = RegexBuilder::new(&search_pattern).case_insensitive(true).build().map_err(|e| format!("{}", e))?;
     Ok(regex)
 }
 
 fn make_case_insensitive_equals_regex(search_pattern: &str) -> Result<Regex, String> {
     let search_pattern = regex::escape(&search_pattern);
     let search_pattern = format!("^{}$", search_pattern);
-    let regex = RegexBuilder::new(&search_pattern)
-        .case_insensitive(true)
-        .build()
-        .map_err(|e| format!("{}", e))?;
+    let regex = RegexBuilder::new(&search_pattern).case_insensitive(true).build().map_err(|e| format!("{}", e))?;
     Ok(regex)
 }
 
@@ -293,10 +287,7 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
 fn make_case_insensitive_like_regex(search_pattern: &str) -> Result<Regex, String> {
     let search_pattern = regex::escape(&search_pattern);
     let regex_pattern = like_pattern_to_regex_pattern(&search_pattern);
-    let regex = RegexBuilder::new(&regex_pattern)
-        .case_insensitive(true)
-        .build()
-        .map_err(|e| format!("{}", e))?;
+    let regex = RegexBuilder::new(&regex_pattern).case_insensitive(true).build().map_err(|e| format!("{}", e))?;
     Ok(regex)
 }
 
@@ -306,84 +297,84 @@ fn make_case_insensitive_like_regex(search_pattern: &str) -> Result<Regex, Strin
 
 pub fn get_functions() -> FunctionImplList {
     let mut funcs = FunctionImplList::new();
-    funcs.insert(UniCase::new("IsNull".to_string()), Rc::new(f_is_null));
-    funcs.insert(UniCase::new("IsBlank".to_string()), Rc::new(f_is_null));
-    funcs.insert(UniCase::new("AreEquals".to_string()), Rc::new(f_are_equals));
-    funcs.insert(UniCase::new("In".to_string()), Rc::new(f_in));
-    funcs.insert(UniCase::new("InLike".to_string()), Rc::new(f_in_like));
-    funcs.insert(UniCase::new("IsLike".to_string()), Rc::new(f_is_like));
-    funcs.insert(UniCase::new("Like".to_string()), Rc::new(f_is_like));
-    funcs.insert(UniCase::new("FirstNotNull".to_string()), Rc::new(f_first_not_null));
-    funcs.insert(UniCase::new("FirstNotEmpty".to_string()), Rc::new(f_first_not_null));
-    funcs.insert(UniCase::new("Concatenate".to_string()), Rc::new(f_concat));
-    funcs.insert(UniCase::new("Concat".to_string()), Rc::new(f_concat));
-    funcs.insert(UniCase::new("Exact".to_string()), Rc::new(f_exact));
-    funcs.insert(UniCase::new("Find".to_string()), Rc::new(f_find));
-    funcs.insert(UniCase::new("Substitute".to_string()), Rc::new(f_substitute));
-    funcs.insert(UniCase::new("Fixed".to_string()), Rc::new(f_fixed));
-    funcs.insert(UniCase::new("Left".to_string()), Rc::new(f_left));
-    funcs.insert(UniCase::new("Right".to_string()), Rc::new(f_right));
-    funcs.insert(UniCase::new("Mid".to_string()), Rc::new(f_mid));
-    funcs.insert(UniCase::new("Len".to_string()), Rc::new(f_len));
-    funcs.insert(UniCase::new("Lower".to_string()), Rc::new(f_lower));
-    funcs.insert(UniCase::new("Upper".to_string()), Rc::new(f_upper));
-    funcs.insert(UniCase::new("Trim".to_string()), Rc::new(f_trim));
-    funcs.insert(UniCase::new("FirstWord".to_string()), Rc::new(f_first_word));
-    funcs.insert(UniCase::new("FirstSentence".to_string()), Rc::new(f_first_sentence));
-    funcs.insert(UniCase::new("Capitalize".to_string()), Rc::new(f_capitalize));
-    funcs.insert(UniCase::new("Split".to_string()), Rc::new(f_split));
-    funcs.insert(UniCase::new("NumberValue".to_string()), Rc::new(f_number_value));
-    funcs.insert(UniCase::new("Text".to_string()), Rc::new(f_text));
-    funcs.insert(UniCase::new("StartsWith".to_string()), Rc::new(f_starts_with));
-    funcs.insert(UniCase::new("EndsWith".to_string()), Rc::new(f_ends_with));
-    funcs.insert(UniCase::new("ReplaceEquals".to_string()), Rc::new(f_replace_equals));
-    funcs.insert(UniCase::new("ReplaceLike".to_string()), Rc::new(f_replace_like));
-    funcs.insert(UniCase::new("And".to_string()), Rc::new(f_and));
-    funcs.insert(UniCase::new("Or".to_string()), Rc::new(f_or));
-    funcs.insert(UniCase::new("Not".to_string()), Rc::new(f_not));
-    funcs.insert(UniCase::new("Xor".to_string()), Rc::new(f_xor));
-    funcs.insert(UniCase::new("Iif".to_string()), Rc::new(f_iif));
-    funcs.insert(UniCase::new("If".to_string()), Rc::new(f_iif));
-    funcs.insert(UniCase::new("Abs".to_string()), Rc::new(f_abs));
-    funcs.insert(UniCase::new("Product".to_string()), Rc::new(f_product));
-    funcs.insert(UniCase::new("Sum".to_string()), Rc::new(f_sum));
-    funcs.insert(UniCase::new("Divide".to_string()), Rc::new(f_divide));
-    funcs.insert(UniCase::new("Subtract".to_string()), Rc::new(f_subtract));
-    funcs.insert(UniCase::new("Mod".to_string()), Rc::new(f_mod));
-    funcs.insert(UniCase::new("Modulo".to_string()), Rc::new(f_mod));
-    funcs.insert(UniCase::new("Round".to_string()), Rc::new(f_round));
-    funcs.insert(UniCase::new("GreaterThan".to_string()), Rc::new(f_greater_than));
-    funcs.insert(UniCase::new("Gt".to_string()), Rc::new(f_greater_than));
-    funcs.insert(UniCase::new("LowerThan".to_string()), Rc::new(f_lower_than));
-    funcs.insert(UniCase::new("Lt".to_string()), Rc::new(f_lower_than));
-    funcs.insert(UniCase::new("GreaterThanOrEqual".to_string()), Rc::new(f_greater_than_or_equal));
-    funcs.insert(UniCase::new("Gtoe".to_string()), Rc::new(f_greater_than_or_equal));
-    funcs.insert(UniCase::new("LowerThanOrEqual".to_string()), Rc::new(f_lower_than_or_equal));
-    funcs.insert(UniCase::new("Ltoe".to_string()), Rc::new(f_lower_than_or_equal));
-    funcs.insert(UniCase::new("Date".to_string()), Rc::new(f_date));
-    funcs.insert(UniCase::new("Now".to_string()), Rc::new(f_now));
-    funcs.insert(UniCase::new("Year".to_string()), Rc::new(f_year));
-    funcs.insert(UniCase::new("Month".to_string()), Rc::new(f_month));
-    funcs.insert(UniCase::new("Day".to_string()), Rc::new(f_day));
-    funcs.insert(UniCase::new("DateDiff".to_string()), Rc::new(f_date_diff));
-    funcs.insert(UniCase::new("DateDiffHours".to_string()), Rc::new(f_date_diff_hours));
-    funcs.insert(UniCase::new("DateDiffDays".to_string()), Rc::new(f_date_diff_days));
-    funcs.insert(UniCase::new("DateDiffMonths".to_string()), Rc::new(f_date_diff_months));
-    funcs.insert(UniCase::new("DateEquals".to_string()), Rc::new(f_date_equals));
-    funcs.insert(UniCase::new("DateNotEquals".to_string()), Rc::new(f_date_not_equals));
-    funcs.insert(UniCase::new("DateLower".to_string()), Rc::new(f_date_lower));
-    funcs.insert(UniCase::new("DateLowerOrEquals".to_string()), Rc::new(f_date_lower_or_equals));
-    funcs.insert(UniCase::new("DateGreater".to_string()), Rc::new(f_date_greater));
-    funcs.insert(UniCase::new("DateGreaterOrEquals".to_string()), Rc::new(f_date_greater_or_equals));
-    funcs.insert(UniCase::new("DateAddHours".to_string()), Rc::new(f_date_add_hours));
-    funcs.insert(UniCase::new("DateAddDays".to_string()), Rc::new(f_date_add_days));
-    funcs.insert(UniCase::new("DateAddMonths".to_string()), Rc::new(f_date_add_months));
-    funcs.insert(UniCase::new("DateAddYears".to_string()), Rc::new(f_date_add_years));
-    funcs.insert(UniCase::new("LocalDate".to_string()), Rc::new(f_local_date));
-    funcs.insert(UniCase::new("DateFormat".to_string()), Rc::new(f_date_format));
-    funcs.insert(UniCase::new("NowSpecificTimeZone".to_string()), Rc::new(f_now_specific_timezone));
-    funcs.insert(UniCase::new("Today".to_string()), Rc::new(f_today));
-    funcs.insert(UniCase::new("Time".to_string()), Rc::new(f_time));
+    funcs.insert(UniCase::new("IsNull".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_is_null)));
+    funcs.insert(UniCase::new("IsBlank".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_is_null)));
+    funcs.insert(UniCase::new("AreEquals".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_are_equals)));
+    funcs.insert(UniCase::new("In".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_in)));
+    funcs.insert(UniCase::new("InLike".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_in_like)));
+    funcs.insert(UniCase::new("IsLike".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_is_like)));
+    funcs.insert(UniCase::new("Like".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_is_like)));
+    funcs.insert(UniCase::new("FirstNotNull".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_first_not_null)));
+    funcs.insert(UniCase::new("FirstNotEmpty".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_first_not_null)));
+    funcs.insert(UniCase::new("Concatenate".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_concat)));
+    funcs.insert(UniCase::new("Concat".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_concat)));
+    funcs.insert(UniCase::new("Exact".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_exact)));
+    funcs.insert(UniCase::new("Find".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_find)));
+    funcs.insert(UniCase::new("Substitute".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_substitute)));
+    funcs.insert(UniCase::new("Fixed".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_fixed)));
+    funcs.insert(UniCase::new("Left".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_left)));
+    funcs.insert(UniCase::new("Right".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_right)));
+    funcs.insert(UniCase::new("Mid".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_mid)));
+    funcs.insert(UniCase::new("Len".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_len)));
+    funcs.insert(UniCase::new("Lower".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_lower)));
+    funcs.insert(UniCase::new("Upper".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_upper)));
+    funcs.insert(UniCase::new("Trim".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_trim)));
+    funcs.insert(UniCase::new("FirstWord".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_first_word)));
+    funcs.insert(UniCase::new("FirstSentence".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_first_sentence)));
+    funcs.insert(UniCase::new("Capitalize".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_capitalize)));
+    funcs.insert(UniCase::new("Split".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_split)));
+    funcs.insert(UniCase::new("NumberValue".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_number_value)));
+    funcs.insert(UniCase::new("Text".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_text)));
+    funcs.insert(UniCase::new("StartsWith".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_starts_with)));
+    funcs.insert(UniCase::new("EndsWith".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_ends_with)));
+    funcs.insert(UniCase::new("ReplaceEquals".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_replace_equals)));
+    funcs.insert(UniCase::new("ReplaceLike".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_replace_like)));
+    funcs.insert(UniCase::new("And".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_and)));
+    funcs.insert(UniCase::new("Or".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_or)));
+    funcs.insert(UniCase::new("Not".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_not)));
+    funcs.insert(UniCase::new("Xor".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_xor)));
+    funcs.insert(UniCase::new("Iif".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_iif)));
+    funcs.insert(UniCase::new("If".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_iif)));
+    funcs.insert(UniCase::new("Abs".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_abs)));
+    funcs.insert(UniCase::new("Product".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_product)));
+    funcs.insert(UniCase::new("Sum".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_sum)));
+    funcs.insert(UniCase::new("Divide".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_divide)));
+    funcs.insert(UniCase::new("Subtract".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_subtract)));
+    funcs.insert(UniCase::new("Mod".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_mod)));
+    funcs.insert(UniCase::new("Modulo".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_mod)));
+    funcs.insert(UniCase::new("Round".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_round)));
+    funcs.insert(UniCase::new("GreaterThan".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_greater_than)));
+    funcs.insert(UniCase::new("Gt".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_greater_than)));
+    funcs.insert(UniCase::new("LowerThan".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_lower_than)));
+    funcs.insert(UniCase::new("Lt".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_lower_than)));
+    funcs.insert(UniCase::new("GreaterThanOrEqual".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_greater_than_or_equal)));
+    funcs.insert(UniCase::new("Gtoe".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_greater_than_or_equal)));
+    funcs.insert(UniCase::new("LowerThanOrEqual".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_lower_than_or_equal)));
+    funcs.insert(UniCase::new("Ltoe".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_lower_than_or_equal)));
+    funcs.insert(UniCase::new("Date".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date)));
+    funcs.insert(UniCase::new("Now".to_string()), (FunctionDeterminism::NonDeterministic, Rc::new(f_now)));
+    funcs.insert(UniCase::new("Year".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_year)));
+    funcs.insert(UniCase::new("Month".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_month)));
+    funcs.insert(UniCase::new("Day".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_day)));
+    funcs.insert(UniCase::new("DateDiff".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_diff)));
+    funcs.insert(UniCase::new("DateDiffHours".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_diff_hours)));
+    funcs.insert(UniCase::new("DateDiffDays".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_diff_days)));
+    funcs.insert(UniCase::new("DateDiffMonths".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_diff_months)));
+    funcs.insert(UniCase::new("DateEquals".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_equals)));
+    funcs.insert(UniCase::new("DateNotEquals".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_not_equals)));
+    funcs.insert(UniCase::new("DateLower".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_lower)));
+    funcs.insert(UniCase::new("DateLowerOrEquals".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_lower_or_equals)));
+    funcs.insert(UniCase::new("DateGreater".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_greater)));
+    funcs.insert(UniCase::new("DateGreaterOrEquals".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_greater_or_equals)));
+    funcs.insert(UniCase::new("DateAddHours".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_add_hours)));
+    funcs.insert(UniCase::new("DateAddDays".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_add_days)));
+    funcs.insert(UniCase::new("DateAddMonths".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_add_months)));
+    funcs.insert(UniCase::new("DateAddYears".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_add_years)));
+    funcs.insert(UniCase::new("LocalDate".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_local_date)));
+    funcs.insert(UniCase::new("DateFormat".to_string()), (FunctionDeterminism::Deterministic, Rc::new(f_date_format)));
+    funcs.insert(UniCase::new("NowSpecificTimeZone".to_string()), (FunctionDeterminism::NonDeterministic, Rc::new(f_now_specific_timezone)));
+    funcs.insert(UniCase::new("Today".to_string()), (FunctionDeterminism::NonDeterministic, Rc::new(f_today)));
+    funcs.insert(UniCase::new("Time".to_string()), (FunctionDeterminism::NonDeterministic, Rc::new(f_time)));
     funcs
 }
 
@@ -539,11 +530,7 @@ fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let result = if no_commas {
         format!("{num:.prec$}", num = number, prec = decimals as usize)
     } else {
-        let int = number
-            .trunc()
-            .to_isize()
-            .ok_or_else(|| "integer cast error".to_string())?
-            .to_formatted_string(&Locale::en);
+        let int = number.trunc().to_isize().ok_or_else(|| "integer cast error".to_string())?.to_formatted_string(&Locale::en);
         let fract = format!("{num:.prec$}", num = number.fract(), prec = decimals as usize);
         let fract: Vec<&str> = fract.split(".").collect();
         let result = match fract.get(1) {
@@ -892,8 +879,7 @@ fn f_product(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for expr in params.iter() {
         let i = exec_expr_to_num(expr, values, None)?;
         let intermediate_result = result;
-        result = std::panic::catch_unwind(|| intermediate_result * i)
-            .map_err(|_| format!("Couldn't multiply {} by {} : overflow", result, i).to_string())?;
+        result = std::panic::catch_unwind(|| intermediate_result * i).map_err(|_| format!("Couldn't multiply {} by {} : overflow", result, i).to_string())?;
     }
     Ok(ExprResult::Num(result))
 }
@@ -904,8 +890,7 @@ fn f_sum(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for expr in params.iter() {
         let i = exec_expr_to_num(expr, values, None)?;
         let intermediate_result = result;
-        result =
-            std::panic::catch_unwind(|| intermediate_result + i).map_err(|_| format!("Couldn't add {} to {} : overflow", i, result).to_string())?;
+        result = std::panic::catch_unwind(|| intermediate_result + i).map_err(|_| format!("Couldn't add {} to {} : overflow", i, result).to_string())?;
     }
     Ok(ExprResult::Num(result))
 }
@@ -943,17 +928,11 @@ fn f_round(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let digits = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as u32;
     let mult_div = ExprDecimal::from((10 as u32).pow(digits));
-    let result = std::panic::catch_unwind(|| (num * mult_div).round() / mult_div)
-        .map_err(|_| format!("Couldn't round {} to {} digits", num, digits).to_string())?;
+    let result = std::panic::catch_unwind(|| (num * mult_div).round() / mult_div).map_err(|_| format!("Couldn't round {} to {} digits", num, digits).to_string())?;
     Ok(ExprResult::Num(result))
 }
 
-fn simple_operator<F: FnOnce(ExprDecimal, ExprDecimal) -> ExprFuncResult>(
-    params: &VecRcExpr,
-    values: &IdentifierValues,
-    f_name: &str,
-    func: F,
-) -> ExprFuncResult {
+fn simple_operator<F: FnOnce(ExprDecimal, ExprDecimal) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 2, f_name)?;
     let num_a = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let num_b = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
@@ -1021,12 +1000,7 @@ fn f_now_specific_timezone(params: &VecRcExpr, values: &IdentifierValues) -> Exp
     }))
 }
 
-fn single_date_func<F: FnOnce(NaiveDateTime) -> ExprFuncResult>(
-    params: &VecRcExpr,
-    values: &IdentifierValues,
-    f_name: &str,
-    func: F,
-) -> ExprFuncResult {
+fn single_date_func<F: FnOnce(NaiveDateTime) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 1, f_name)?;
     let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     func(date)
@@ -1052,24 +1026,14 @@ fn f_day(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_date_func(params, values, "Day", |d| Ok(ExprResult::Num(ExprDecimal::from(d.day()))))
 }
 
-fn two_dates_func_no_defaults<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(
-    params: &VecRcExpr,
-    values: &IdentifierValues,
-    f_name: &str,
-    func: F,
-) -> ExprFuncResult {
+fn two_dates_func_no_defaults<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 2, f_name)?;
     let date_left = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     let date_right = exec_expr_to_date_no_defaults(params.get(1).unwrap(), values)?;
     func(date_left, date_right)
 }
 
-fn two_dates_func<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(
-    params: &VecRcExpr,
-    values: &IdentifierValues,
-    f_name: &str,
-    func: F,
-) -> ExprFuncResult {
+fn two_dates_func<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_between_params_count(params, 2, 8, f_name)?;
 
     let default_year = params.get(2).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
@@ -1079,26 +1043,8 @@ fn two_dates_func<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(
     let default_minute = params.get(6).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
     let default_second = params.get(7).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
 
-    let date_left = exec_expr_to_date(
-        params.get(0).unwrap(),
-        values,
-        default_year,
-        default_month,
-        default_day,
-        default_hour,
-        default_minute,
-        default_second,
-    )?;
-    let date_right = exec_expr_to_date(
-        params.get(1).unwrap(),
-        values,
-        default_year,
-        default_month,
-        default_day,
-        default_hour,
-        default_minute,
-        default_second,
-    )?;
+    let date_left = exec_expr_to_date(params.get(0).unwrap(), values, default_year, default_month, default_day, default_hour, default_minute, default_second)?;
+    let date_right = exec_expr_to_date(params.get(1).unwrap(), values, default_year, default_month, default_day, default_hour, default_minute, default_second)?;
     func(date_left, date_right)
 }
 
@@ -1202,10 +1148,9 @@ fn f_date_add_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncR
         .with_year(date_time.year() + years_to_add)
         .ok_or(format!("Couldn't add {} years to the date {}", years_to_add, date_time))?;
 
-    new_date_time =
-        new_date_time
-            .with_month0(new_month0 as u32)
-            .ok_or(format!("Couldn't set {} as month to the date {}", new_month0 + 1, new_date_time))?;
+    new_date_time = new_date_time
+        .with_month0(new_month0 as u32)
+        .ok_or(format!("Couldn't set {} as month to the date {}", new_month0 + 1, new_date_time))?;
 
     Ok(ExprResult::Date(new_date_time))
 }
@@ -1216,9 +1161,7 @@ fn f_date_add_years(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     let years = exec_expr_to_int(params.get(1).unwrap(), values)? as i32;
 
-    let new_date_time = date_time
-        .with_year(date_time.year() + years)
-        .ok_or(format!("Couldn't add {} years to the date {}", years, date_time))?;
+    let new_date_time = date_time.with_year(date_time.year() + years).ok_or(format!("Couldn't add {} years to the date {}", years, date_time))?;
 
     Ok(ExprResult::Date(new_date_time))
 }
@@ -1227,9 +1170,7 @@ fn f_date_add_years(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 1, 2, "LocalDate")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    let time_zone_name = params
-        .get(1)
-        .map_or(Ok("Romance Standard Time".into()), |expr| exec_expr_to_string(expr, values))?;
+    let time_zone_name = params.get(1).map_or(Ok("Romance Standard Time".into()), |expr| exec_expr_to_string(expr, values))?;
 
     let offset = get_utc_offset(&time_zone_name)?;
     let new_dt = DateTime::<Local>::from_utc(date_time, *offset);
@@ -1240,9 +1181,7 @@ fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
 fn f_date_format(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 1, 2, "DateFormat")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    let format = params
-        .get(1)
-        .map_or(Ok("yyyy-MM-dd HH:mm:ss.fff".into()), |expr| exec_expr_to_string(expr, values))?;
+    let format = params.get(1).map_or(Ok("yyyy-MM-dd HH:mm:ss.fff".into()), |expr| exec_expr_to_string(expr, values))?;
 
     let format = dotnet_format_to_strptime_format(&format);
     let result = date_time.format(&format);
