@@ -128,7 +128,7 @@ impl cmp::PartialEq for ExprResult {
             (ExprResult::Num(x_a), ExprResult::Num(x_b)) => x_a == x_b,
             (ExprResult::Date(x_a), ExprResult::Date(x_b)) => x_a == x_b,
             (ExprResult::TimeSpan(x_a), ExprResult::TimeSpan(x_b)) => x_a == x_b,
-            (ExprResult::Null, ExprResult::Null) => true, // todo : should be false !? => implemented in the `f_are_equals` function
+            (ExprResult::Null, ExprResult::Null) => true, // should be false ? => implemented in the `f_are_equals` function
             _ => false,
         }
     }
@@ -383,7 +383,9 @@ mod tests {
     }
 
     #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(2))]))]
+    #[test_case("test ( 1 , 42 )" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(42))]))]
     #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
+    #[test_case("test(test())" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))]))] // to debug
     #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
     #[test_case("Test(42)" => Expr::FunctionCall("Test".to_string(), vec![Rc::new(Expr::Num(dec!(42)))]))]
     fn parse_function_call(expression: &str) -> Expr {

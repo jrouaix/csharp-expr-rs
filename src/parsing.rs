@@ -84,10 +84,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcEx
         "array",
         preceded(
             char('['),
-            cut(terminated(
-                map(separated_list(preceded(sp, char(',')), value), |v| v.into_iter().map(Rc::new).collect()),
-                preceded(sp, char(']')),
-            )),
+            cut(terminated(map(separated_list(preceded(sp, char(',')), value), |v| v.into_iter().map(Rc::new).collect()), preceded(sp, char(']')))),
         ),
     )(input)
 }
@@ -101,7 +98,7 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
     context(
         "parameters",
         preceded(
-            char('('),
+            preceded(opt(sp), char('(')),
             terminated(
                 map(separated_list(preceded(sp, char(',')), value), |v| v.into_iter().map(Rc::new).collect()),
                 // map_opt(opt(separated_list(preceded(opt(sp), char(',')), value)), |opt| opt),
@@ -111,8 +108,13 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
     )(input)
 }
 
+/// parameters between parenthesis
+fn empty_parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
+    context("empty_parameters", preceded(preceded(opt(sp), char('(')), terminated(map(opt(sp), |_| vec![]), preceded(opt(sp), char(')')))))(input)
+}
+
 fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
-    pair(identifier, parameters)(input)
+    pair(identifier, alt((parameters, empty_parameters)))(input)
 }
 
 fn identifier_only<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {

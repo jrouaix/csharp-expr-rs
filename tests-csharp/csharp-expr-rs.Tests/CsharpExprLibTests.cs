@@ -39,6 +39,15 @@ namespace csharp_expr_rs.Tests
             }
         }
 
+        [Theory]
+        [InlineData("", true)]
+        [InlineData("Today()", false)]
+        public void Determinism(string expr, bool determinist)
+        {
+            var expression = new Expression(expr);
+            expression.IsDeterministic.ShouldBe(determinist);
+        }
+
         [Fact]
         public void Get_identifier_value()
         {

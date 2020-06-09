@@ -19,6 +19,7 @@ namespace csharp_expr_rs
         [DllImport(LIB_NAME)]
         public static extern FFIStringHandle ffi_get_identifiers(FFIExpressionHandle ptr);
         [DllImport(LIB_NAME)]
+        [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool ffi_is_deterministic(FFIExpressionHandle ptr);
 
         [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
