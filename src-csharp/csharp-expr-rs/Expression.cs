@@ -10,6 +10,9 @@ namespace csharp_expr_rs
     {
         public static FFICSharpString MakeFFICSharpString(this string str)
         {
+            if (str == null)
+                str = string.Empty;
+
             unsafe
             {
                 fixed (char* ptr = str)
