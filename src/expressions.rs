@@ -55,18 +55,62 @@ impl AddAssign for FunctionDeterminism {
     }
 }
 
+// got this list from rust : https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/operators/arithmetic-operators
+#[derive(PartialEq, Clone)]
+pub enum AssocOp {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulus,
+    LAnd,
+    LOr,
+    Equal,
+    Less,
+    LessEqual,
+    NotEqual,
+    Greater,
+    GreaterEqual,
+}
+
+impl fmt::Display for AssocOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            AssocOp::Add => write!(f, "+"),
+            AssocOp::Subtract => write!(f, "-"),
+            AssocOp::Multiply => write!(f, "*"),
+            AssocOp::Divide => write!(f, "/"),
+            AssocOp::Modulus => write!(f, "%"),
+            AssocOp::LAnd => write!(f, "&&"),
+            AssocOp::LOr => write!(f, "||"),
+            AssocOp::Equal => write!(f, "=="),
+            AssocOp::Less => write!(f, "<"),
+            AssocOp::LessEqual => write!(f, "<="),
+            AssocOp::NotEqual => write!(f, "!="),
+            AssocOp::Greater => write!(f, ">"),
+            AssocOp::GreaterEqual => write!(f, ">="),
+        }
+    }
+}
+
+impl fmt::Debug for AssocOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        self::Display::fmt(self, f)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone)]
 pub enum Expr {
-    Str(String),
-    Boolean(bool),
-    Num(ExprDecimal),
-    Null,
-    Array(VecRcExpr),
-    Identifier(String),
-    FunctionCall(String, VecRcExpr),
-    PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>),
-    // BinaryOperator(RcExpr, RcExpr, AssocOp)
+    Str(String),                                               // "text"
+    Boolean(bool),                                             // true | false
+    Num(ExprDecimal),                                          // 123.45
+    Null,                                                      // null
+    Array(VecRcExpr),                                          // [null, 42, "text"]
+    Identifier(String),                                        // varToto
+    FunctionCall(String, VecRcExpr),                           // func(42, "text")
+    PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>), // func(42, "text") + *func()
+    BinaryOperator(RcExpr, RcExpr, AssocOp),                   // 32 + 10
 }
 
 #[derive(Clone, Debug)]
@@ -100,6 +144,7 @@ impl fmt::Debug for Expr {
             Expr::Identifier(x) => write!(f, "Identifier({:?})", x),
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
             Expr::PreparedFunctionCall(s, x, _) => write!(f, "PreparedFunctionCall({:?},{:?})", s, x),
+            Expr::BinaryOperator(l, r, o) => write!(f, "{:?} {:?} {:?}", l, o, r),
         }
     }
 }
@@ -112,6 +157,7 @@ impl cmp::PartialEq for Expr {
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
+            (Expr::BinaryOperator(left_a, right_a, op_a), Expr::BinaryOperator(left_b, right_b, op_b)) => left_a == left_b && right_a == right_b && op_a == op_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
             (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => n_a == n_b && p_a == p_b,
             (Expr::Null, Expr::Null) => true,
@@ -145,6 +191,7 @@ impl Display for Expr {
             Expr::Identifier(i) => write!(f, "@{}", i),
             Expr::FunctionCall(_, _) => write!(f, "FunctionCall"),
             Expr::PreparedFunctionCall(_, _, _) => write!(f, "PreparedFunctionCall"),
+            Expr::BinaryOperator(l, r, o) => write!(f, "{} {} {}", l, o, r),
         }
     }
 }
@@ -244,6 +291,7 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
         Expr::Num(_) => (FunctionDeterminism::Deterministic, expr),
         Expr::Null => (FunctionDeterminism::Deterministic, expr),
         Expr::PreparedFunctionCall(_, _, _) => unreachable!(),
+        Expr::BinaryOperator(_, _, _) => (FunctionDeterminism::Deterministic, expr),
     }
 }
 
@@ -268,6 +316,9 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<E
                 Ok(call_result)
             }
         }
+        Expr::BinaryOperator(_, _, _) => {
+            todo!();
+        }
     }
 }
 
@@ -280,7 +331,7 @@ mod tests {
 
     macro_rules! rc_expr_str {
         ( $x:expr ) => {
-            Rc::new(Expr::Str($x))
+            Rc::new(Expr::Str($x.to_string()))
         };
     }
     macro_rules! exprresult_str {
@@ -290,7 +341,7 @@ mod tests {
     }
     macro_rules! rc_expr_num {
         ( $x:expr ) => {
-            Rc::new(Expr::Num($x))
+            Rc::new(Expr::Num(dec!($x)))
         };
     }
     macro_rules! exprresult_num {
@@ -314,6 +365,12 @@ mod tests {
     #[test_case("true" => Expr::Boolean(true))]
     #[test_case("false" => Expr::Boolean(false))]
     fn parse_boolean(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("(1 + 2)" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(2), AssocOp::Add))]
+    #[test_case("(1 * 3)" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(3), AssocOp::Multiply))]
+    fn parse_binary_operator(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
@@ -368,6 +425,7 @@ mod tests {
     }
 
     #[test_case("id" => Expr::Identifier("id".to_string()))]
+    #[test_case(" hello " => Expr::Identifier("hello".to_string()))]
     #[test_case("@idarobase" => Expr::Identifier("idarobase".to_string()))]
     // #[test_case("id_id" => Expr::Identifier("id_id".to_string()))] // to debug
     #[test_case("id42" => Expr::Identifier("id42".to_string()))]
@@ -377,13 +435,13 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("[1,2]" => Expr::Array(vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(2))]))]
+    #[test_case("[1,2]" => Expr::Array(vec![rc_expr_num!(1), rc_expr_num!(2)]))]
     fn parse_array(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(2))]))]
-    #[test_case("test ( 1 , 42 )" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(dec!(1)), rc_expr_num!(dec!(42))]))]
+    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(2)]))]
+    #[test_case("test ( 1 , 42 )" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(42)]))]
     #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
     #[test_case("test(test())" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))]))] // to debug
     #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
@@ -392,9 +450,9 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(dec!(42)), rc_expr_null!()])), rc_expr_num!(dec!(2)), rc_expr_str!("null".to_string())]))]
-    #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Str("value".to_string()))]))]
-    #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Str("va lue".to_string()))]))]
+    #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42), rc_expr_null!()])), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
+    #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value")]))]
+    #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")]))]
     fn parse_complexe_expressions(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
@@ -712,5 +770,15 @@ mod tests {
         let expr = parse_expr(expression).unwrap();
         let expr = prepare_expr_and_identifiers(expr, &get_functions());
         expr.determinism == Deterministic
+    }
+
+    #[test]
+    fn partial_eq_test() {
+        assert_eq!(AssocOp::Multiply, AssocOp::Multiply);
+        assert_eq!(Expr::Num(dec!(1)), Expr::Num(dec!(1)));
+        assert_eq!(
+            Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Divide),
+            Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Divide)
+        );
     }
 }

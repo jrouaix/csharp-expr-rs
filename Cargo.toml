@@ -9,7 +9,7 @@ name="csharp_expr"
 crate-type = ["dylib"]
 
 [dependencies]
-nom="5.1.1"
+nom="5.1.2"
 lazy_static = "1.4.0"
 unescape = "0.1.0"
 encoding_rs = "0.8.23"
@@ -18,8 +18,8 @@ regex = "1"
 num-format = "0.4.0" # when floating point formating will be here : https://github.com/bcmyers/num-format/issues/1
 chrono = "0.4"
 unicase = "2.6.0"
-rust_decimal = "1.6.0"
-rust_decimal_macros = "1.6.0"
+rust_decimal = "1.7.0"
+rust_decimal_macros = "1.7.0"
  
 [dev-dependencies]
 test-case = "1.0.0"

@@ -34,7 +34,13 @@ c# expression parser in Rust
 - [x] Handle (good enough) non ascii strings
 - [x] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate : https://crates.io/crates/rust_decimal ?)
 - [x] Debug empty parameters list parsing (it's parsed as identifier right now) 
-- [-] Handle functions determinism
+- [x] Handle functions determinism
+- [x] Handle C# Assoc/Binary operators parsing (only delimited by parenthesis)
+- [ ] Handle C# Assoc/Binary operators execution
+- [ ] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter (only stack overflow now)!
+- [ ] Handle operators precedence !
+- [ ] refacto : replace some preceded/terminated by 'delimited'
+- [ ] refacto : remove all usage of `opt(sp)`, the take_while in sp() should be enough do the optional trick
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [ ] Make all default String lazy static or &str
 - [ ] Debug empty string parsing
@@ -44,7 +50,6 @@ c# expression parser in Rust
 - [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/
 - [ ] Error handling on expressions parsing
 - [ ] Modularisation, so anyone can implement their own functions list
-- [ ] Handle Assoc/Binary operators
 - [ ] Allow passing functions from dotnet side to be called from rust expression ?    // see System.Runtime.InteropServices.AllowReversePInvokeCallsAttribute
 - [ ] Publish on crates.io
 

@@ -30,32 +30,36 @@ fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E
     take_while(|c| " \t\r\n".contains(c))(input)
 }
 
-// /// string interior combinator
-// fn str_content<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-//     // alt((tag("\"\""), escaped(alphanumeric1, '\\', one_of("\\\"rnt"))))(input)
+fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, AssocOp, E> {
+    context(
+        "binary_operator",
+        delimited(
+            sp,
+            alt((
+                map(tag("+"), |_| AssocOp::Add),
+                map(tag("-"), |_| AssocOp::Subtract),
+                map(tag("*"), |_| AssocOp::Multiply),
+                map(tag("/"), |_| AssocOp::Divide),
+                map(tag("%"), |_| AssocOp::Modulus),
+                map(tag("&&"), |_| AssocOp::LAnd),
+                map(tag("||"), |_| AssocOp::LOr),
+                map(tag("=="), |_| AssocOp::Equal),
+                map(tag("<"), |_| AssocOp::Less),
+                map(tag("<="), |_| AssocOp::LessEqual),
+                map(tag("!="), |_| AssocOp::NotEqual),
+                map(tag(">"), |_| AssocOp::Greater),
+                map(tag(">="), |_| AssocOp::GreaterEqual),
+            )),
+            sp,
+        ),
+    )(input)
+}
 
-//     // // WORKING
-//     let white_spaces = alt((tag(" "), tag("\t"), tag("_"), tag("-")));
-//     let punctuation = alt((tag("."), tag(","), tag(":"), tag("!"), tag("?"), tag("¿"), tag("%"))); // a lot more ! to debug
-
-//     // let white_spaces = is_a("&é'(-è_çà@^`|([{~}])");
-//     escaped(alt((alphanumeric1, white_spaces, punctuation)), '\\', one_of("\\\"rnt"))(input)
-
-//     // TRY 1 => panics a lot
-//     // escaped(anychar, '\\', one_of("\\\"rnt"))(input)
-//     // TRY 2 => 100% CPU
-//     // escaped(take_while(|c| c != '"'), '\\', one_of("\\\"rnt"))(input)
-//     // TRY 3 => 100% CPU
-//     // escaped(not(char('"')), '\\', one_of("\\\"rnt"))(input)
-// }
-
-// /// full string combinator
-// fn stringU<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-//     context("string", preceded(char('\"'), cut(terminated(str_content, char('\"')))))(input)
-// }
+fn binary_operation<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (Expr, Expr, AssocOp), E> {
+    context("binary_operation", delimited(char('('), map(tuple((value, binary_operator, value)), |x| (x.0, x.2, x.1)), char(')')))(input)
+}
 
 // string parser from here : https://github.com/Geal/nom/issues/1075
-
 fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
     escaped(
         take_while1(|c| c != '\\' && c != '"'),
@@ -74,8 +78,9 @@ fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool,
 }
 
 /// null combinator
-fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
-    map(tag("null"), |_| ())(input)
+fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    let (i, _) = tag("null")(input)?;
+    Ok((i, Expr::Null))
 }
 
 /// array combinator
@@ -99,16 +104,12 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
         "parameters",
         preceded(
             preceded(opt(sp), char('(')),
-            terminated(
-                map(separated_list(preceded(sp, char(',')), value), |v| v.into_iter().map(Rc::new).collect()),
-                // map_opt(opt(separated_list(preceded(opt(sp), char(',')), value)), |opt| opt),
-                preceded(opt(sp), char(')')),
-            ),
+            terminated(map(separated_list(preceded(opt(sp), char(',')), value), |v| v.into_iter().map(Rc::new).collect()), preceded(opt(sp), char(')'))),
         ),
     )(input)
 }
 
-/// parameters between parenthesis
+/// empty parameters
 fn empty_parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
     context("empty_parameters", preceded(preceded(opt(sp), char('(')), terminated(map(opt(sp), |_| vec![]), preceded(opt(sp), char(')')))))(input)
 }
@@ -126,8 +127,9 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
     preceded(
         sp,
         alt((
+            map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
-            map(null, |_| Expr::Null),
+            null,
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),
             map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
@@ -138,5 +140,44 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
 }
 
 pub fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    delimited(opt(sp), value, opt(sp))(input)
+    delimited(sp, value, sp)(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nom::error::ErrorKind;
+    use rust_decimal_macros::*;
+    use test_case::test_case;
+
+    #[test_case("+", AssocOp::Add)]
+    #[test_case("- ", AssocOp::Subtract)]
+    #[test_case(" /", AssocOp::Divide)]
+    #[test_case(" && ", AssocOp::LAnd)]
+    fn binary_operator_test(text: &str, expected: AssocOp) {
+        let result = binary_operator::<(&str, ErrorKind)>(text);
+        assert_eq!(result, Ok(("", expected)));
+    }
+
+    #[test_case("(1 + 2)", (Expr::Num(dec!(1)), Expr::Num(dec!(2)), AssocOp::Add))]
+    #[test_case("( 3 - 2)", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Subtract))]
+    #[test_case("(3|| 5)", (Expr::Num(dec!(3)), Expr::Num(dec!(5)), AssocOp::LOr))]
+    fn binary_operation_test(text: &str, expected: (Expr, Expr, AssocOp)) {
+        let result = binary_operation::<(&str, ErrorKind)>(text);
+        assert_eq!(result, Ok(("", expected)));
+    }
+
+    // #[test_case("3 / 5", Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Subtract))]
+    // fn value_test(text: &str, expected: Expr) {
+    //     let result = value::<(&str, ErrorKind)>(text);
+    //     assert_eq!(result, Ok(("", expected)));
+    // }
+
+    #[test]
+    fn value_test() {
+        let expected = Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Divide);
+        let text = "(3 / 5)";
+        let result = value::<(&str, ErrorKind)>(text);
+        assert_eq!(result, Ok(("", expected)));
+    }
 }
