@@ -3,6 +3,7 @@ use crate::expressions::*;
 use once_cell::sync::Lazy;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::rc::Rc;
 use std::slice;
 use std::vec::Vec;
 use unicase::UniCase;
@@ -42,7 +43,7 @@ extern "C" fn ffi_parse_and_prepare_expr(expression: FFICSharpString) -> *mut Ex
 
     let funcs = crate::functions::get_functions();
 
-    let expr = prepare_expr_and_identifiers(expr, &funcs);
+    let expr = prepare_expr_and_identifiers(expr, &funcs, Rc::new(crate::functions::f_operators));
     Box::into_raw(Box::new(expr))
 }
 

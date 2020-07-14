@@ -5,7 +5,6 @@ use chrono::prelude::*;
 use chrono::Duration;
 use nom::error::ErrorKind;
 use rust_decimal::prelude::*;
-use rust_decimal_macros::*;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -22,8 +21,11 @@ pub type FunctionImpl = dyn Fn(&VecRcExpr, &IdentifierValues) -> ExprFuncResult;
 pub type FunctionImplList = HashMap<UniCase<String>, (FunctionDeterminism, Rc<FunctionImpl>)>;
 pub type IdentifierValueGetter = dyn Fn() -> String;
 pub type IdentifierValues = HashMap<UniCase<String>, Box<IdentifierValueGetter>>;
-
 pub type ExprDecimal = Decimal;
+
+pub trait BinaryOperatorsImpl: Fn(&Expr, &Expr, AssocOp) -> ExprFuncResult {}
+impl<T> BinaryOperatorsImpl for T where T: Fn(&Expr, &Expr, AssocOp) -> ExprFuncResult {}
+pub type BinaryOperatorsImplRc = Rc<dyn BinaryOperatorsImpl>;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -56,7 +58,7 @@ impl AddAssign for FunctionDeterminism {
 }
 
 // got this list from rust : https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/operators/arithmetic-operators
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum AssocOp {
     Add,
     Subtract,
@@ -102,15 +104,16 @@ impl fmt::Debug for AssocOp {
 #[repr(C)]
 #[derive(Clone)]
 pub enum Expr {
-    Str(String),                                               // "text"
-    Boolean(bool),                                             // true | false
-    Num(ExprDecimal),                                          // 123.45
-    Null,                                                      // null
-    Array(VecRcExpr),                                          // [null, 42, "text"]
-    Identifier(String),                                        // varToto
-    FunctionCall(String, VecRcExpr),                           // func(42, "text")
-    PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>), // func(42, "text") + *func()
-    BinaryOperator(RcExpr, RcExpr, AssocOp),                   // 32 + 10
+    Str(String),                                                                  // "text"
+    Boolean(bool),                                                                // true | false
+    Num(ExprDecimal),                                                             // 123.45
+    Null,                                                                         // null
+    Array(VecRcExpr),                                                             // [null, 42, "text"]
+    Identifier(String),                                                           // varToto
+    FunctionCall(String, VecRcExpr),                                              // func(42, "text")
+    PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>),                    // func(42, "text") + *func()
+    BinaryOperator(RcExpr, RcExpr, AssocOp),                                      // 32 + 10
+    PreparedBinaryOperator(RcExpr, RcExpr, AssocOp, Rc<dyn BinaryOperatorsImpl>), // 32 + 10 + *operators()
 }
 
 #[derive(Clone, Debug)]
@@ -145,6 +148,7 @@ impl fmt::Debug for Expr {
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
             Expr::PreparedFunctionCall(s, x, _) => write!(f, "PreparedFunctionCall({:?},{:?})", s, x),
             Expr::BinaryOperator(l, r, o) => write!(f, "{:?} {:?} {:?}", l, o, r),
+            Expr::PreparedBinaryOperator(l, r, o, _) => write!(f, "{:?} {:?} {:?}", l, o, r),
         }
     }
 }
@@ -158,6 +162,7 @@ impl cmp::PartialEq for Expr {
             (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
             (Expr::BinaryOperator(left_a, right_a, op_a), Expr::BinaryOperator(left_b, right_b, op_b)) => left_a == left_b && right_a == right_b && op_a == op_b,
+            (Expr::PreparedBinaryOperator(left_a, right_a, op_a, _), Expr::PreparedBinaryOperator(left_b, right_b, op_b, _)) => left_a == left_b && right_a == right_b && op_a == op_b,
             (Expr::FunctionCall(n_a, p_a), Expr::FunctionCall(n_b, p_b)) => n_a == n_b && p_a == p_b,
             (Expr::PreparedFunctionCall(n_a, p_a, _), Expr::PreparedFunctionCall(n_b, p_b, _)) => n_a == n_b && p_a == p_b,
             (Expr::Null, Expr::Null) => true,
@@ -192,6 +197,7 @@ impl Display for Expr {
             Expr::FunctionCall(_, _) => write!(f, "FunctionCall"),
             Expr::PreparedFunctionCall(_, _, _) => write!(f, "PreparedFunctionCall"),
             Expr::BinaryOperator(l, r, o) => write!(f, "{} {} {}", l, o, r),
+            Expr::PreparedBinaryOperator(l, r, o, _) => write!(f, "{} {} {}", l, o, r),
         }
     }
 }
@@ -245,9 +251,9 @@ pub fn parse_expr(expression: &str) -> Result<Expr, String> {
     }
 }
 
-pub fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList) -> ExprAndIdentifiers {
+pub fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList, operators: BinaryOperatorsImplRc) -> ExprAndIdentifiers {
     let mut identifiers = HashSet::<String>::new();
-    let (determinism, expr) = prepare_expr(Rc::new(expr), funcs, &mut identifiers);
+    let (determinism, expr) = prepare_expr(Rc::new(expr), funcs, &mut identifiers, operators);
     ExprAndIdentifiers {
         expr,
         identifiers_names: identifiers,
@@ -255,11 +261,11 @@ pub fn prepare_expr_and_identifiers(expr: Expr, funcs: &FunctionImplList) -> Exp
     }
 }
 
-pub fn prepare_expr_list(exprs: &SliceRcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> (FunctionDeterminism, VecRcExpr) {
+pub fn prepare_expr_list(exprs: &SliceRcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>, operators: BinaryOperatorsImplRc) -> (FunctionDeterminism, VecRcExpr) {
     let mut list = VecRcExpr::with_capacity(exprs.len());
     let mut total_determinist = FunctionDeterminism::default();
     for p in exprs.iter() {
-        let (determinism, prepared) = prepare_expr(Rc::clone(p), funcs, identifiers);
+        let (determinism, prepared) = prepare_expr(Rc::clone(p), funcs, identifiers, Rc::clone(&operators));
         dbg!(&prepared, determinism);
         list.push(prepared);
         total_determinist += determinism;
@@ -267,7 +273,7 @@ pub fn prepare_expr_list(exprs: &SliceRcExpr, funcs: &FunctionImplList, identifi
     (total_determinist, list)
 }
 
-pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>) -> (FunctionDeterminism, RcExpr) {
+pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut HashSet<String>, operators: BinaryOperatorsImplRc) -> (FunctionDeterminism, RcExpr) {
     match expr.as_ref() {
         Expr::Identifier(name) => {
             identifiers.insert(name.clone());
@@ -275,15 +281,19 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
         }
         Expr::FunctionCall(name, parameters) => match &funcs.get(&UniCase::new(name.into())) {
             Some(fnc) => {
-                let (params_determinism, prepared_list) = prepare_expr_list(parameters, funcs, identifiers);
+                let (params_determinism, prepared_list) = prepare_expr_list(parameters, funcs, identifiers, operators);
                 dbg!(name, fnc.0);
                 dbg!(&prepared_list, &params_determinism);
                 (fnc.0 + params_determinism, Rc::new(Expr::PreparedFunctionCall(name.clone(), prepared_list, Rc::clone(&fnc.1))))
             }
             None => (FunctionDeterminism::default(), expr),
         },
+        Expr::BinaryOperator(left, right, op) => (
+            FunctionDeterminism::Deterministic,
+            RcExpr::new(Expr::PreparedBinaryOperator(Rc::clone(left), Rc::clone(right), *op, Rc::clone(&operators))),
+        ),
         Expr::Array(elements) => {
-            let (determinism, prepared_list) = prepare_expr_list(elements, funcs, identifiers);
+            let (determinism, prepared_list) = prepare_expr_list(elements, funcs, identifiers, operators);
             (determinism, Rc::new(Expr::Array(prepared_list)))
         }
         Expr::Str(_) => (FunctionDeterminism::Deterministic, expr),
@@ -291,7 +301,7 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
         Expr::Num(_) => (FunctionDeterminism::Deterministic, expr),
         Expr::Null => (FunctionDeterminism::Deterministic, expr),
         Expr::PreparedFunctionCall(_, _, _) => unreachable!(),
-        Expr::BinaryOperator(_, _, _) => (FunctionDeterminism::Deterministic, expr),
+        Expr::PreparedBinaryOperator(_, _, _, _) => unreachable!(),
     }
 }
 
@@ -316,9 +326,8 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<E
                 Ok(call_result)
             }
         }
-        Expr::BinaryOperator(_, _, _) => {
-            todo!();
-        }
+        Expr::BinaryOperator(_, _, _) => Err(format!("No operators implementation")),
+        Expr::PreparedBinaryOperator(left, right, op, op_impl) => op_impl(left, right, *op),
     }
 }
 
@@ -327,6 +336,7 @@ mod tests {
     use super::FunctionDeterminism::*;
     use super::*;
     use crate::functions::*;
+    use rust_decimal_macros::*;
     use test_case::test_case;
 
     macro_rules! rc_expr_str {
@@ -470,7 +480,7 @@ mod tests {
             UniCase::new("knownFunc".to_string()),
             (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42))))),
         );
-        let expr = prepare_expr_and_identifiers(expr, &funcs);
+        let expr = prepare_expr_and_identifiers(expr, &funcs, Rc::new(null_op));
         println!("{:?}", expr);
         let mut result = expr.identifiers_names.iter().cloned().collect::<Vec<String>>();
         result.sort();
@@ -501,12 +511,17 @@ mod tests {
         values.insert("my".into(), Box::new(|| "value".to_string()));
 
         let expression = "first(fiRst(FIRST(my,2,3),2,3),2,3)";
-        let result = parse_exec_expr(expression, &funcs, &values);
+        let result = parse_exec_expr(expression, &funcs, &values, Rc::new(null_op));
         assert_eq!(result, "value");
         println!("{:?}", result);
+
+        let expression = "(first(fiRst(FIRST(my,2,3),2,3),2,3) - 1)";
+        let result = parse_exec_expr(expression, &funcs, &values, Rc::new(null_op));
+        assert_eq!(result, "");
     }
 
-    // #[test_case("Exact(null, \"\")" => "true")] // to debug
+    #[test_case("(1+2)" => "3")]
+    #[test_case("Exact(null, \"\")" => "true")]
     #[test_case("null" => "")]
     #[test_case("eXaCt(null, Concat(null, null))" => "true")]
     #[test_case("Exact(\"null\", \"null\")" => "true")]
@@ -717,7 +732,8 @@ mod tests {
     // #[test_case("Time()" => "---")]
     fn execute_some_real_world_expression(expression: &str) -> String {
         let funcs = get_functions();
-        parse_exec_expr(expression, &funcs, &IdentifierValues::new())
+        let op = f_operators;
+        parse_exec_expr(expression, &funcs, &IdentifierValues::new(), Rc::new(op))
     }
 
     #[test]
@@ -727,12 +743,12 @@ mod tests {
     }
 
     fn parse_exec_expr_with_defaults<'a>(expression: &'a str) -> String {
-        parse_exec_expr(expression, &get_functions(), &IdentifierValues::new())
+        parse_exec_expr(expression, &get_functions(), &IdentifierValues::new(), Rc::new(f_operators))
     }
 
-    fn parse_exec_expr<'a>(expression: &'a str, funcs: &FunctionImplList, values: &IdentifierValues) -> String {
+    fn parse_exec_expr<'a>(expression: &'a str, funcs: &FunctionImplList, values: &IdentifierValues, operators: BinaryOperatorsImplRc) -> String {
         let expr = parse_expr(expression).unwrap();
-        let expr = prepare_expr_and_identifiers(expr, funcs);
+        let expr = prepare_expr_and_identifiers(expr, funcs, operators);
         let result = exec_expr(&expr.expr, values).unwrap();
         result.to_string()
     }
@@ -768,7 +784,7 @@ mod tests {
     #[test_case("now(42)" => false)]
     fn deterministic_or_not(expression: &str) -> bool {
         let expr = parse_expr(expression).unwrap();
-        let expr = prepare_expr_and_identifiers(expr, &get_functions());
+        let expr = prepare_expr_and_identifiers(expr, &get_functions(), Rc::new(null_op));
         expr.determinism == Deterministic
     }
 
@@ -780,5 +796,9 @@ mod tests {
             Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Divide),
             Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Divide)
         );
+    }
+
+    fn null_op(_: &Expr, _: &Expr, _: AssocOp) -> ExprFuncResult {
+        Ok(ExprResult::Null)
     }
 }

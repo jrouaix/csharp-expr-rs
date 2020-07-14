@@ -378,6 +378,10 @@ pub fn get_functions() -> FunctionImplList {
     funcs
 }
 
+pub fn f_operators(left: &Expr, right: &Expr, op: AssocOp) -> ExprFuncResult {
+    todo!("TODO")
+}
+
 // #region Category names
 
 // private const string MiscCatName = "Misc";
