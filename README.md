@@ -39,6 +39,7 @@ c# expression parser in Rust
 - [ ] Handle C# Assoc/Binary operators execution
 - [ ] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter (only stack overflow now)!
 - [ ] Handle operators precedence !
+- [ ] Replace &Vec usage by slices (have a look at f_operators)
 - [ ] refacto : replace some preceded/terminated by 'delimited'
 - [ ] refacto : remove all usage of `opt(sp)`, the take_while in sp() should be enough do the optional trick
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors

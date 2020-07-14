@@ -382,7 +382,7 @@ pub fn f_operators(left: RcExpr, right: RcExpr, op: AssocOp, values: &Identifier
     match (op, left, right) {
         (AssocOp::Add, l, r) => f_sum(&vec![l, r], values),
         (AssocOp::Divide, l, r) => f_divide(&vec![l, r], values),
-        (AssocOp::Equal, l, r) => f_exact(&vec![l, r], values),
+        (AssocOp::Equal, l, r) => f_are_equals(&vec![l, r], values),
         (AssocOp::Greater, l, r) => f_greater_than(&vec![l, r], values),
         (AssocOp::GreaterEqual, l, r) => f_greater_than_or_equal(&vec![l, r], values),
         (AssocOp::LAnd, l, r) => f_and(&vec![l, r], values),
@@ -391,7 +391,7 @@ pub fn f_operators(left: RcExpr, right: RcExpr, op: AssocOp, values: &Identifier
         (AssocOp::LOr, l, r) => f_or(&vec![l, r], values),
         (AssocOp::Modulus, l, r) => f_mod(&vec![l, r], values),
         (AssocOp::Multiply, l, r) => f_product(&vec![l, r], values),
-        (AssocOp::NotEqual, l, r) => todo!(),
+        (AssocOp::NotEqual, l, r) => f_are_not_equals(&vec![l, r], values),
         (AssocOp::Subtract, l, r) => f_subtract(&vec![l, r], values),
     }
 }
@@ -423,6 +423,15 @@ fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     let right = exec_expr(params.get(1).unwrap(), values)?;
     let res = results_are_equals(&left, &right);
     Ok(ExprResult::Boolean(res))
+}
+
+// AreNotEquals
+fn f_are_not_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    assert_exact_params_count(params, 2, "AreNotEquals")?;
+    let left = exec_expr(params.get(0).unwrap(), values)?;
+    let right = exec_expr(params.get(1).unwrap(), values)?;
+    let res = results_are_equals(&left, &right);
+    Ok(ExprResult::Boolean(!res))
 }
 
 // In
