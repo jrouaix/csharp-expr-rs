@@ -56,7 +56,10 @@ fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a st
 }
 
 fn binary_operation<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (Expr, Expr, AssocOp), E> {
-    context("binary_operation", delimited(char('('), map(tuple((value, binary_operator, value)), |x| (x.0, x.2, x.1)), char(')')))(input)
+    context(
+        "binary_operation",
+        delimited(opt(char('(')), map(tuple((non_binary_operation_value, binary_operator, value)), |x| (x.0, x.2, x.1)), opt(char(')'))),
+    )(input)
 }
 
 // string parser from here : https://github.com/Geal/nom/issues/1075
@@ -95,7 +98,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcEx
 }
 
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("identifier", preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric0))))))(input)
+    context("identifier", preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1))))))(input)
 }
 
 /// parameters between parenthesis
@@ -139,6 +142,23 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
     )(input)
 }
 
+/// here, we apply the space parser before trying to parse a value
+fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    preceded(
+        sp,
+        alt((
+            // map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
+            map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
+            null,
+            map(boolean, Expr::Boolean),
+            map_opt(string, |s| unescape(s).map(Expr::Str)),
+            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
+            map(array, Expr::Array),
+            map(identifier_only, |s| Expr::Identifier(s.to_string())),
+        )),
+    )(input)
+}
+
 pub fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     delimited(sp, value, sp)(input)
 }
@@ -162,22 +182,30 @@ mod tests {
     #[test_case("(1 + 2)", (Expr::Num(dec!(1)), Expr::Num(dec!(2)), AssocOp::Add))]
     #[test_case("( 3 - 2)", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Subtract))]
     #[test_case("(3|| 5)", (Expr::Num(dec!(3)), Expr::Num(dec!(5)), AssocOp::LOr))]
+    #[test_case("5 * 5", (Expr::Num(dec!(5)), Expr::Num(dec!(5)), AssocOp::Multiply))]
+    #[test_case(" 42 % \"2\"", (Expr::Num(dec!(42)), Expr::Str("2".to_string()), AssocOp::Modulus))]
+    #[test_case("2 == 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::Equal))]
+    #[test_case("2 > 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::Greater))]
+    #[test_case("2 < 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::Less))]
+    #[test_case("2 >= 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::GreaterEqual))]
+    #[test_case("2 <= 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::LessEqual))]
     fn binary_operation_test(text: &str, expected: (Expr, Expr, AssocOp)) {
         let result = binary_operation::<(&str, ErrorKind)>(text);
         assert_eq!(result, Ok(("", expected)));
     }
 
-    // #[test_case("3 / 5", Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Subtract))]
-    // fn value_test(text: &str, expected: Expr) {
-    //     let result = value::<(&str, ErrorKind)>(text);
-    //     assert_eq!(result, Ok(("", expected)));
-    // }
-
     #[test]
-    fn value_test() {
-        let expected = Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Divide);
-        let text = "(3 / 5)";
-        let result = value::<(&str, ErrorKind)>(text);
-        assert_eq!(result, Ok(("", expected)));
+    fn binary_operation_parenthesis_test() {
+        let expected = Ok((
+            "",
+            Expr::BinaryOperator(
+                RcExpr::new(Expr::Num(dec!(3))),
+                RcExpr::new(Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(5))), RcExpr::new(Expr::Str("2".to_string())), AssocOp::Subtract)),
+                AssocOp::Divide,
+            ),
+        ));
+        assert_eq!(value::<(&str, ErrorKind)>("3 / (5-\"2\")"), expected);
+        assert_eq!(value::<(&str, ErrorKind)>("3 / 5-\"2\""), expected);
+        assert_eq!(value::<(&str, ErrorKind)>("(3 / 5-\"2\")"), expected);
     }
 }

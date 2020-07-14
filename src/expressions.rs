@@ -438,6 +438,7 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
+    #[test_case("a" => Expr::Identifier("a".to_string()))]
     #[test_case("id" => Expr::Identifier("id".to_string()))]
     #[test_case(" hello " => Expr::Identifier("hello".to_string()))]
     #[test_case("@idarobase" => Expr::Identifier("idarobase".to_string()))]
@@ -524,11 +525,18 @@ mod tests {
         assert_eq!(result, "");
     }
 
+    #[test_case("(true && false)" => "false")]
+    #[test_case("false || true" => "true")]
     #[test_case("(1+2)" => "3")]
     #[test_case("(1 == 1)" => "true")]
     #[test_case("(1 != 1)" => "false")]
     #[test_case("(1/2)" => "0.5")]
     #[test_case("(1-(2/2))" => "0")]
+    #[test_case("1>42" => "false")]
+    // #[test_case("2 >= 2" => "true")]
+    // #[test_case("5>=2" => "true")]
+    #[test_case("7<2" => "false")]
+    // #[test_case("9<=9" => "false")]
     #[test_case("(42%3)" => "0")]
     #[test_case("(43 % 3)" => "1")]
     #[test_case("(NumberValue(\"3\") % 2)" => "1")]
