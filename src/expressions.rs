@@ -288,10 +288,14 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
             }
             None => (FunctionDeterminism::default(), expr),
         },
-        Expr::BinaryOperator(left, right, op) => (
-            FunctionDeterminism::Deterministic,
-            RcExpr::new(Expr::PreparedBinaryOperator(Rc::clone(left), Rc::clone(right), *op, Rc::clone(&operators))),
-        ),
+        Expr::BinaryOperator(left, right, op) => {
+            let left_prepared = prepare_expr(Rc::clone(left), funcs, identifiers, Rc::clone(&operators));
+            let right_prepared = prepare_expr(Rc::clone(right), funcs, identifiers, Rc::clone(&operators));
+            (
+                (left_prepared.0 + right_prepared.0),
+                RcExpr::new(Expr::PreparedBinaryOperator(left_prepared.1, right_prepared.1, *op, Rc::clone(&operators))),
+            )
+        }
         Expr::Array(elements) => {
             let (determinism, prepared_list) = prepare_expr_list(elements, funcs, identifiers, operators);
             (determinism, Rc::new(Expr::Array(prepared_list)))
@@ -521,6 +525,11 @@ mod tests {
     }
 
     #[test_case("(1+2)" => "3")]
+    #[test_case("(1/2)" => "0.5")]
+    #[test_case("(1-(2/2))" => "0")]
+    #[test_case("(42%3)" => "0")]
+    #[test_case("(43 % 3)" => "1")]
+    #[test_case("(NumberValue(\"3\") % 2)" => "1")]
     #[test_case("Exact(null, \"\")" => "true")]
     #[test_case("null" => "")]
     #[test_case("eXaCt(null, Concat(null, null))" => "true")]
@@ -782,6 +791,8 @@ mod tests {
     #[test_case("Upper(Sum(2, now(42)))" => false)]
     #[test_case("Upper(Unkkkkkknown(2, now(42)))" => true)] // this one will always fail before calling now(), so it's determinist
     #[test_case("now(42)" => false)]
+    #[test_case("(1 + now(42))" => false)]
+    #[test_case("(Upper(\"\") + 2)" => true)]
     fn deterministic_or_not(expression: &str) -> bool {
         let expr = parse_expr(expression).unwrap();
         let expr = prepare_expr_and_identifiers(expr, &get_functions(), Rc::new(null_op));

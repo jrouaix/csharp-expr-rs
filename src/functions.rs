@@ -381,8 +381,18 @@ pub fn get_functions() -> FunctionImplList {
 pub fn f_operators(left: RcExpr, right: RcExpr, op: AssocOp, values: &IdentifierValues) -> ExprFuncResult {
     match (op, left, right) {
         (AssocOp::Add, l, r) => f_sum(&vec![l, r], values),
-
-        (_, _, _) => todo!(),
+        (AssocOp::Divide, l, r) => f_divide(&vec![l, r], values),
+        (AssocOp::Equal, l, r) => f_exact(&vec![l, r], values),
+        (AssocOp::Greater, l, r) => f_greater_than(&vec![l, r], values),
+        (AssocOp::GreaterEqual, l, r) => f_greater_than_or_equal(&vec![l, r], values),
+        (AssocOp::LAnd, l, r) => f_and(&vec![l, r], values),
+        (AssocOp::Less, l, r) => f_lower_than(&vec![l, r], values),
+        (AssocOp::LessEqual, l, r) => f_lower_than_or_equal(&vec![l, r], values),
+        (AssocOp::LOr, l, r) => f_or(&vec![l, r], values),
+        (AssocOp::Modulus, l, r) => f_mod(&vec![l, r], values),
+        (AssocOp::Multiply, l, r) => f_product(&vec![l, r], values),
+        (AssocOp::NotEqual, l, r) => todo!(),
+        (AssocOp::Subtract, l, r) => f_subtract(&vec![l, r], values),
     }
 }
 
