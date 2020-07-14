@@ -378,8 +378,12 @@ pub fn get_functions() -> FunctionImplList {
     funcs
 }
 
-pub fn f_operators(left: &Expr, right: &Expr, op: AssocOp) -> ExprFuncResult {
-    todo!("TODO")
+pub fn f_operators(left: &Expr, right: &Expr, op: AssocOp, values: &IdentifierValues) -> ExprFuncResult {
+    match (op, left, right) {
+        (AssocOp::Add, l, r) => f_sum(&vec![Rc::new(l.clone()), Rc::new(r.clone())], values),
+
+        (_, _, _) => todo!(),
+    }
 }
 
 // #region Category names
