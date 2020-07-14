@@ -23,8 +23,8 @@ pub type IdentifierValueGetter = dyn Fn() -> String;
 pub type IdentifierValues = HashMap<UniCase<String>, Box<IdentifierValueGetter>>;
 pub type ExprDecimal = Decimal;
 
-pub trait BinaryOperatorsImpl: Fn(&Expr, &Expr, AssocOp, &IdentifierValues) -> ExprFuncResult {}
-impl<T> BinaryOperatorsImpl for T where T: Fn(&Expr, &Expr, AssocOp, &IdentifierValues) -> ExprFuncResult {}
+pub trait BinaryOperatorsImpl: Fn(RcExpr, RcExpr, AssocOp, &IdentifierValues) -> ExprFuncResult {}
+impl<T> BinaryOperatorsImpl for T where T: Fn(RcExpr, RcExpr, AssocOp, &IdentifierValues) -> ExprFuncResult {}
 pub type BinaryOperatorsImplRc = Rc<dyn BinaryOperatorsImpl>;
 
 #[repr(C)]
@@ -327,7 +327,7 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<E
             }
         }
         Expr::BinaryOperator(_, _, _) => Err(format!("No operators implementation")),
-        Expr::PreparedBinaryOperator(left, right, op, op_impl) => op_impl(left, right, *op, values),
+        Expr::PreparedBinaryOperator(left, right, op, op_impl) => op_impl(Rc::clone(left), Rc::clone(right), *op, values),
     }
 }
 
@@ -798,7 +798,7 @@ mod tests {
         );
     }
 
-    fn null_op(_: &Expr, _: &Expr, _: AssocOp, _: &IdentifierValues) -> ExprFuncResult {
+    fn null_op(_: RcExpr, _: RcExpr, _: AssocOp, _: &IdentifierValues) -> ExprFuncResult {
         Ok(ExprResult::Null)
     }
 }

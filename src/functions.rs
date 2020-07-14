@@ -378,9 +378,9 @@ pub fn get_functions() -> FunctionImplList {
     funcs
 }
 
-pub fn f_operators(left: &Expr, right: &Expr, op: AssocOp, values: &IdentifierValues) -> ExprFuncResult {
+pub fn f_operators(left: RcExpr, right: RcExpr, op: AssocOp, values: &IdentifierValues) -> ExprFuncResult {
     match (op, left, right) {
-        (AssocOp::Add, l, r) => f_sum(&vec![Rc::new(l.clone()), Rc::new(r.clone())], values),
+        (AssocOp::Add, l, r) => f_sum(&vec![l, r], values),
 
         (_, _, _) => todo!(),
     }
