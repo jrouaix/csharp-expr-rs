@@ -44,11 +44,11 @@ fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a st
                 map(tag("&&"), |_| AssocOp::LAnd),
                 map(tag("||"), |_| AssocOp::LOr),
                 map(tag("=="), |_| AssocOp::Equal),
-                map(tag("<"), |_| AssocOp::Less),
                 map(tag("<="), |_| AssocOp::LessEqual),
+                map(tag("<"), |_| AssocOp::Less),
                 map(tag("!="), |_| AssocOp::NotEqual),
-                map(tag(">"), |_| AssocOp::Greater),
                 map(tag(">="), |_| AssocOp::GreaterEqual),
+                map(tag(">"), |_| AssocOp::Greater),
             )),
             sp,
         ),
@@ -181,6 +181,7 @@ mod tests {
 
     #[test_case("(1 + 2)", (Expr::Num(dec!(1)), Expr::Num(dec!(2)), AssocOp::Add))]
     #[test_case("( 3 - 2)", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Subtract))]
+    #[test_case("( 3 / 2)", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Divide))]
     #[test_case("(3|| 5)", (Expr::Num(dec!(3)), Expr::Num(dec!(5)), AssocOp::LOr))]
     #[test_case("5 * 5", (Expr::Num(dec!(5)), Expr::Num(dec!(5)), AssocOp::Multiply))]
     #[test_case(" 42 % \"2\"", (Expr::Num(dec!(42)), Expr::Str("2".to_string()), AssocOp::Modulus))]
@@ -189,6 +190,8 @@ mod tests {
     #[test_case("2 < 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::Less))]
     #[test_case("2 >= 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::GreaterEqual))]
     #[test_case("2 <= 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::LessEqual))]
+    #[test_case("true && false", (Expr::Boolean(true), Expr::Boolean(false), AssocOp::LAnd))]
+    #[test_case("false || true", (Expr::Boolean(false), Expr::Boolean(true), AssocOp::LOr))]
     fn binary_operation_test(text: &str, expected: (Expr, Expr, AssocOp)) {
         let result = binary_operation::<(&str, ErrorKind)>(text);
         assert_eq!(result, Ok(("", expected)));
