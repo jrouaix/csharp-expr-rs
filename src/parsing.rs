@@ -138,7 +138,7 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
 
 /// here, we apply the space parser before trying to parse a value
 fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    preceded(
+    delimited(
         sp,
         alt((
             map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
@@ -150,11 +150,12 @@ fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IRe
             map(array, Expr::Array),
             map(identifier, |s| Expr::Identifier(s.to_string())),
         )),
+        sp,
     )(input)
 }
 
 pub fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    delimited(sp, value, sp)(input)
+    value(input)
 }
 
 #[cfg(test)]
@@ -169,19 +170,9 @@ mod tests {
             Rc::new(Expr::Str($x.to_string()))
         };
     }
-    macro_rules! exprresult_str {
-        ( $x:expr ) => {
-            ExprResult::Str($x)
-        };
-    }
     macro_rules! rc_expr_num {
         ( $x:expr ) => {
             Rc::new(Expr::Num(dec!($x)))
-        };
-    }
-    macro_rules! exprresult_num {
-        ( $x:expr ) => {
-            ExprResult::Num($x)
         };
     }
     macro_rules! rc_expr_null {
