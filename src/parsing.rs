@@ -94,7 +94,7 @@ fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcEx
 
 /// parameters between parenthesis
 fn comma_separated_values<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-    context("comma_separated_values", map(separated_list(delimited(sp, char(','), sp), value), |v| v.into_iter().map(Rc::new).collect()))(input)
+    context("comma_separated_values", map(separated_list(char(','), value), |v| v.into_iter().map(Rc::new).collect()))(input)
 }
 
 /// parameters between parenthesis
@@ -103,7 +103,7 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
 }
 
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("identifier", delimited(sp, preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1)))), sp))(input)
+    context("identifier", terminated(preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1)))), sp))(input)
 }
 
 /// empty parameters
@@ -143,7 +143,6 @@ fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IRe
         sp,
         alt((
             map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
-            // map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             null,
             map(boolean, Expr::Boolean),
@@ -326,11 +325,24 @@ mod tests {
     }
 
     #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42), rc_expr_null!()])), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
+    #[test_case("hello" => Expr::Identifier("hello".to_string()))]
+    #[test_case(" _hella " => Expr::Identifier("_hella".to_string()))]
+    #[test_case(" helloworld " => Expr::Identifier("helloworld".to_string()))]
     #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value")]))]
     #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")]))]
     #[test_case("test(\"va lue\") - 3" => Expr::BinaryOperator(RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), rc_expr_num!(3), AssocOp::Subtract))]
     #[test_case("42 / test(\"va lue\")" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), AssocOp::Divide))]
-    fn parse_complexe_expressions(expression: &str) -> Expr {
-        parse_expr(expression).unwrap()
+    fn parse_complexe_expressions(expression: &'static str) -> Expr {
+        let expr = expr::<(&str, ErrorKind)>(expression);
+        match expr {
+            Ok((rest, expr)) => match rest.len() {
+                0 => expr,
+                _ => {
+                    dbg!(expr);
+                    panic!(rest)
+                }
+            },
+            Err(err_kind) => panic!(format!("{:?}", err_kind)),
+        }
     }
 }

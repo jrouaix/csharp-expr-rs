@@ -37,7 +37,7 @@ c# expression parser in Rust
 - [x] Handle functions determinism
 - [x] Handle C# Assoc/Binary operators parsing (only delimited by parenthesis)
 - [x] Handle C# Assoc/Binary operators execution
-- [ ] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter (only stack overflow now)!
+- [ ] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter
 - [ ] Handle operators precedence !
 - [ ] Replace &Vec usage by slices (have a look at f_operators)
 - [x] refacto : replace some preceded/terminated by 'delimited'
