@@ -429,7 +429,7 @@ mod tests {
     #[test_case("1 == 1" => "true")]
     #[test_case("1 != 1" => "false")]
     #[test_case("1/2" => "0.5")]
-    #[test_case("1-2/2)" => "0")]
+    #[test_case("1-2/2" => "0")]
     #[test_case("1>42" => "false")]
     #[test_case("2 >= 2" => "true")]
     #[test_case("5>=2" => "true")]

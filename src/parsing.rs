@@ -26,11 +26,13 @@ use unescape::unescape;
 
 /// spaces combinator
 fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    dbg!("sp", input);
     // is_a(" \t\r\n")(input) // not working
     take_while(|c| " \t\r\n".contains(c))(input)
 }
 
 fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, AssocOp, E> {
+    dbg!("binary_operator", input);
     context(
         "binary_operator",
         delimited(
@@ -56,6 +58,7 @@ fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a st
 }
 
 fn binary_operation<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (Expr, Expr, AssocOp), E> {
+    dbg!("binary_operation", input);
     context(
         "binary_operation",
         // delimited(opt(char('(')), map(tuple((non_binary_operation_value, binary_operator, value)), |x| (x.0, x.2, x.1)), opt(char(')'))),
@@ -64,54 +67,64 @@ fn binary_operation<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a s
 }
 
 // string parser from here : https://github.com/Geal/nom/issues/1075
-fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    dbg!("parse_str", input);
     escaped(
         take_while1(|c| c != '\\' && c != '"'),
         '\\',
         one_of("\"\\/bfnrtu"), // Note, this will not detect invalid unicode escapes.
-    )(i)
+    )(input)
 }
 
-fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("string", delimited(char('\"'), cut(map(opt(parse_str), |o| o.unwrap_or_default())), char('\"')))(i)
+fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    dbg!("string", input);
+    context("string", delimited(char('\"'), cut(map(opt(parse_str), |o| o.unwrap_or_default())), char('\"')))(input)
 }
 
 /// boolean combinator
 fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool, E> {
+    dbg!("boolean", input);
     alt((map(tag("false"), |_| false), map(tag("true"), |_| true)))(input)
 }
 
 /// null combinator
 fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    dbg!("null", input);
     let (i, _) = tag("null")(input)?;
     Ok((i, Expr::Null))
 }
 
 /// array combinator
 fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-    context("parameters", delimited(char('['), comma_separated_values, char(']')))(input)
+    dbg!("array", input);
+    context("array", delimited(char('['), comma_separated_values, char(']')))(input)
 }
 
 /// parameters between parenthesis
 fn comma_separated_values<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
+    dbg!("comma_separated_values", input);
     context("comma_separated_values", map(separated_list(char(','), value), |v| v.into_iter().map(Rc::new).collect()))(input)
 }
 
 /// parameters between parenthesis
 fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
+    dbg!("parameters", input);
     context("parameters", delimited(char('('), comma_separated_values, char(')')))(input)
 }
 
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    dbg!("identifier", input);
     context("identifier", terminated(preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1)))), sp))(input)
 }
 
 /// empty parameters
 fn empty_parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
+    dbg!("empty_parameters", input);
     context("empty_parameters", map(tuple((char('('), sp, char(')'))), |_| vec![]))(input)
 }
 
 fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
+    dbg!("function_call", input);
     pair(identifier, alt((parameters, empty_parameters)))(input)
 }
 
@@ -121,17 +134,18 @@ fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
 
 /// here, we apply the space parser before trying to parse a value
 fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    dbg!("value", input);
     delimited(
         sp,
         alt((
-            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             null,
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),
-            map(array, Expr::Array),
+            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(identifier, |s| Expr::Identifier(s.to_string())),
+            map(array, Expr::Array),
         )),
         sp,
     )(input)
@@ -139,16 +153,17 @@ fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E
 
 /// here, we apply the space parser before trying to parse a value
 fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    dbg!("non_binary_operation_value", input);
     delimited(
         sp,
         alt((
-            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             null,
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),
-            map(array, Expr::Array),
+            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(identifier, |s| Expr::Identifier(s.to_string())),
+            map(array, Expr::Array),
         )),
         sp,
     )(input)
