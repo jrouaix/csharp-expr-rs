@@ -56,6 +56,9 @@ fn exec_expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator:
         Ok(n)
     } else {
         let mut s = exec_expr_to_string(expr, values)?;
+        // if s.len() == 0 {
+        //     return Ok(dec!(0));
+        // }
         if let Some(c) = decimal_separator {
             s = s.replace(c, ".")
         }
@@ -78,8 +81,8 @@ fn exec_expr_to_int(expr: &RcExpr, values: &IdentifierValues) -> Result<isize, S
     let res = exec_expr(expr, values)?;
     match &res {
         ExprResult::Num(n) => Ok(n.to_isize().ok_or_else(|| "Error casting value to integer".to_string())?),
-        ExprResult::Str(s) => Ok(s.parse::<isize>().or_else(|_| Err(format!("The value '{}' is not a number.", s)))?),
-        expr => Err(format!("The value '{}' is not a number.", expr)),
+        ExprResult::Str(s) => Ok(s.parse::<isize>().or_else(|_| Err(format!("The value '{}' is not a integer.", s)))?),
+        expr => Err(format!("The value '{}' is not a number, nor a string.", expr)),
     }
 }
 
@@ -270,7 +273,7 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
                 previous_char = Some(c);
             }
         }
-        dbg!("{} {} => {}", c, previous_char.unwrap_or(' '), &result);
+        // dbg!("{} {} => {}", c, previous_char.unwrap_or(' '), &result);
     }
 
     match previous_char {
@@ -514,7 +517,6 @@ fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let regex = make_case_insensitive_search_regex(&find_text)?;
 
     let within_text = exec_expr_to_string(params.get(1).unwrap(), values)?;
-    dbg!("{}", find_text);
     let position = match regex.find_at(&within_text, start_num) {
         None => 0,                // 0 for not found
         Some(m) => m.start() + 1, // because it's a Excel function and 1 based enumeration
@@ -728,6 +730,7 @@ fn f_number_value(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResu
         None => None,
         Some(expr) => exec_expr_to_string(expr, values)?.chars().next(),
     };
+
     let number = exec_expr_to_num(params.get(0).unwrap(), values, separator)?;
     Ok(ExprResult::Num(number))
 }
@@ -744,7 +747,6 @@ fn f_starts_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResul
     loop {
         let t = t_iter.next();
         let s = s_iter.next();
-        dbg!("{:?} {:?}", t, s);
         match (s, t) {
             (None, None) => return Ok(ExprResult::Boolean(true)),
             (None, Some(_)) => return Ok(ExprResult::Boolean(true)),
@@ -771,7 +773,6 @@ fn f_ends_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult 
     loop {
         let t = t_iter.next();
         let s = s_iter.next();
-        dbg!("{:?} {:?}", t, s);
         match (s, t) {
             (None, None) => return Ok(ExprResult::Boolean(true)),
             (None, Some(_)) => return Ok(ExprResult::Boolean(true)),

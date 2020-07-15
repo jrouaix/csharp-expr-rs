@@ -72,7 +72,7 @@ fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str
 }
 
 fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("string", preceded(char('\"'), cut(terminated(map(opt(parse_str), |o| o.unwrap_or_default()), char('\"')))))(i)
+    context("string", delimited(char('\"'), cut(map(opt(parse_str), |o| o.unwrap_or_default())), char('\"')))(i)
 }
 
 /// boolean combinator
@@ -88,57 +88,51 @@ fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E>
 
 /// array combinator
 fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-    context(
-        "array",
-        preceded(
-            char('['),
-            cut(terminated(map(separated_list(preceded(sp, char(',')), value), |v| v.into_iter().map(Rc::new).collect()), preceded(sp, char(']')))),
-        ),
-    )(input)
+    context("parameters", delimited(char('['), comma_separated_values, char(']')))(input)
 }
 
-fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context("identifier", preceded(opt(sp), preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1))))))(input)
+/// parameters between parenthesis
+fn comma_separated_values<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
+    context("comma_separated_values", map(separated_list(delimited(sp, char(','), sp), value), |v| v.into_iter().map(Rc::new).collect()))(input)
 }
 
 /// parameters between parenthesis
 fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-    context(
-        "parameters",
-        preceded(
-            preceded(opt(sp), char('(')),
-            terminated(map(separated_list(preceded(opt(sp), char(',')), value), |v| v.into_iter().map(Rc::new).collect()), preceded(opt(sp), char(')'))),
-        ),
-    )(input)
+    context("parameters", delimited(char('('), comma_separated_values, char(')')))(input)
+}
+
+fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+    context("identifier", delimited(sp, preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1)))), sp))(input)
 }
 
 /// empty parameters
 fn empty_parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-    context("empty_parameters", preceded(preceded(opt(sp), char('(')), terminated(map(opt(sp), |_| vec![]), preceded(opt(sp), char(')')))))(input)
+    context("empty_parameters", map(tuple((char('('), sp, char(')'))), |_| vec![]))(input)
 }
 
 fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
     pair(identifier, alt((parameters, empty_parameters)))(input)
 }
 
-fn identifier_only<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    map(pair(identifier, not(parameters)), |(a, _b)| a)(input)
-}
+// fn identifier_only<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+//     map(pair(identifier, not(preceded(sp, char('(')))), |(a, _b)| a)(input)
+// }
 
 /// here, we apply the space parser before trying to parse a value
 fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    preceded(
+    delimited(
         sp,
         alt((
+            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             null,
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),
-            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(array, Expr::Array),
-            map(identifier_only, |s| Expr::Identifier(s.to_string())),
+            map(identifier, |s| Expr::Identifier(s.to_string())),
         )),
+        sp,
     )(input)
 }
 
@@ -147,14 +141,14 @@ fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IRe
     preceded(
         sp,
         alt((
+            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             // map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             null,
             map(boolean, Expr::Boolean),
             map_opt(string, |s| unescape(s).map(Expr::Str)),
-            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
             map(array, Expr::Array),
-            map(identifier_only, |s| Expr::Identifier(s.to_string())),
+            map(identifier, |s| Expr::Identifier(s.to_string())),
         )),
     )(input)
 }
@@ -169,6 +163,32 @@ mod tests {
     use nom::error::ErrorKind;
     use rust_decimal_macros::*;
     use test_case::test_case;
+
+    macro_rules! rc_expr_str {
+        ( $x:expr ) => {
+            Rc::new(Expr::Str($x.to_string()))
+        };
+    }
+    macro_rules! exprresult_str {
+        ( $x:expr ) => {
+            ExprResult::Str($x)
+        };
+    }
+    macro_rules! rc_expr_num {
+        ( $x:expr ) => {
+            Rc::new(Expr::Num(dec!($x)))
+        };
+    }
+    macro_rules! exprresult_num {
+        ( $x:expr ) => {
+            ExprResult::Num($x)
+        };
+    }
+    macro_rules! rc_expr_null {
+        () => {
+            Rc::new(Expr::Null)
+        };
+    }
 
     #[test_case("+", AssocOp::Add)]
     #[test_case("- ", AssocOp::Subtract)]
@@ -197,6 +217,16 @@ mod tests {
         assert_eq!(result, Ok(("", expected)));
     }
 
+    #[test_case("test()", Expr::FunctionCall("test".to_string(), VecRcExpr::new()))]
+    #[test_case(" toto () ", Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]
+    #[test_case(" toto (toto()) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]))]
+    #[test_case("toto((null - null)) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
+    #[test_case("tata(null - null) ", Expr::FunctionCall("tata".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
+    fn parse_some_expr(text: &str, expected: Expr) {
+        let result = parse_expr(text).unwrap();
+        assert_eq!(result, expected);
+    }
+
     #[test]
     fn binary_operation_parenthesis_test() {
         let expected = Ok((
@@ -210,5 +240,101 @@ mod tests {
         assert_eq!(value::<(&str, ErrorKind)>("3 / (5-\"2\")"), expected);
         assert_eq!(value::<(&str, ErrorKind)>("3 / 5-\"2\""), expected);
         assert_eq!(value::<(&str, ErrorKind)>("(3 / 5-\"2\")"), expected);
+    }
+
+    #[test_case("true" => Expr::Boolean(true))]
+    #[test_case("false" => Expr::Boolean(false))]
+    fn parse_boolean(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("(1 + 2)" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(2), AssocOp::Add))]
+    #[test_case("(1 * 3)" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(3), AssocOp::Multiply))]
+    fn parse_binary_operator(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test]
+    fn parse_empty_string() {
+        let expr = parse_expr("\"\"").unwrap();
+        assert_eq!(expr, Expr::Str("".to_string()))
+    }
+
+    #[test]
+    fn parse_string_with_doublequote() -> Result<(), String> {
+        let expression = "\" \\\" \"";
+        let expected = " \" ";
+        let result = parse_expr(expression)?;
+        println!("'{}' => '{}'", expression, result.to_string());
+        assert_eq!(result, Expr::Str(expected.to_string()));
+        Ok(())
+    }
+
+    #[test_case(stringify!("null") => "null")]
+    #[test_case(stringify!("test") => "test")]
+    #[test_case(stringify!("t") => "t")]
+    #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
+    #[test_case(stringify!("test\\slash") => "test\\slash")]
+    #[test_case(stringify!("test\newline") => "test\newline")]
+    #[test_case(stringify!("test\ttab") => "test\ttab")]
+    #[test_case(stringify!("test\rreturn") => "test\rreturn")]
+    #[test_case(stringify!("test escape") => "test escape")]
+    #[test_case("\"test escape\"" => "test escape")]
+    #[test_case("\"test\ttab\"" => "test\ttab")]
+    fn parse_str(expression: &str) -> String {
+        let result = parse_expr(expression);
+        println!("{:?}", result);
+        let expr = result.unwrap();
+        if let Expr::Str(result) = expr {
+            result
+        } else {
+            panic!("{:?}", expr)
+        }
+    }
+
+    #[test_case("1" => Expr::Num(dec!(1)))]
+    #[test_case("1.2" => Expr::Num(dec!(1.2)))]
+    #[test_case("-0.42" => Expr::Num(dec!(-0.42)))]
+    fn parse_num(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("null" => Expr::Null)]
+    fn parse_null(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("a" => Expr::Identifier("a".to_string()))]
+    #[test_case("id" => Expr::Identifier("id".to_string()))]
+    #[test_case(" hello " => Expr::Identifier("hello".to_string()))]
+    #[test_case("@idarobase" => Expr::Identifier("idarobase".to_string()))]
+    // #[test_case("id_id" => Expr::Identifier("id_id".to_string()))] // to debug
+    #[test_case("id42" => Expr::Identifier("id42".to_string()))]
+    #[test_case("_id0" => Expr::Identifier("_id0".to_string()))]
+    #[test_case("_id1" => Expr::Identifier("_id1".to_string()))]
+    fn parse_identifier(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("[1,2]" => Expr::Array(vec![rc_expr_num!(1), rc_expr_num!(2)]))]
+    fn parse_array(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(2)]))]
+    #[test_case("test ( 1 , 42 )" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(42)]))]
+    #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
+    #[test_case("test(test())" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))]))] // to debug
+    #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
+    #[test_case("Test(42)" => Expr::FunctionCall("Test".to_string(), vec![Rc::new(Expr::Num(dec!(42)))]))]
+    fn parse_function_call(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
+    }
+
+    #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42), rc_expr_null!()])), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
+    #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value")]))]
+    #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")]))]
+    fn parse_complexe_expressions(expression: &str) -> Expr {
+        parse_expr(expression).unwrap()
     }
 }
