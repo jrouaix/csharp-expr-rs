@@ -246,7 +246,10 @@ impl ExprResult {
 pub fn parse_expr(expression: &str) -> Result<Expr, String> {
     let expr = expr::<(&str, ErrorKind)>(expression);
     match expr {
-        Ok(ok) => Ok(ok.1),
+        Ok((rest, expr)) => match rest.len() {
+            0 => Ok(expr),
+            _ => Err(format!("Unable to parse the rest of the expression '{:?}'", rest)),
+        },
         Err(err_kind) => Err(format!("{:?}", err_kind)),
     }
 }
@@ -412,29 +415,30 @@ mod tests {
         let expression = "first(fiRst(FIRST(my,2,3),2,3),2,3)";
         let result = parse_exec_expr(expression, &funcs, &values, Rc::new(null_op));
         assert_eq!(result, "value");
-        println!("{:?}", result);
 
-        let expression = "(first(fiRst(FIRST(my,2,3),2,3),2,3) - 1)";
+        let expression = "fiRst(my,2,3) - 1";
         let result = parse_exec_expr(expression, &funcs, &values, Rc::new(null_op));
         assert_eq!(result, "");
     }
 
-    #[test_case("(true && false)" => "false")]
+    #[test_case("true && false" => "false")]
     #[test_case("false || true" => "true")]
     #[test_case("3" => "3")]
-    #[test_case("(1+2)" => "3")]
-    #[test_case("(1 == 1)" => "true")]
-    #[test_case("(1 != 1)" => "false")]
-    #[test_case("(1/2)" => "0.5")]
-    #[test_case("(1-(2/2))" => "0")]
+    #[test_case("1+2" => "3")]
+    #[test_case("1-1" => "0")]
+    #[test_case("1 == 1" => "true")]
+    #[test_case("1 != 1" => "false")]
+    #[test_case("1/2" => "0.5")]
+    #[test_case("1-2/2)" => "0")]
     #[test_case("1>42" => "false")]
     #[test_case("2 >= 2" => "true")]
     #[test_case("5>=2" => "true")]
     #[test_case("7<2" => "false")]
     #[test_case("9<=9" => "true")]
-    #[test_case("(42%3)" => "0")]
-    #[test_case("(43 % 3)" => "1")]
-    #[test_case("(NumberValue(\"3\") % 2)" => "1")]
+    #[test_case("42%3" => "0")]
+    #[test_case("43 % 3" => "1")]
+    #[test_case("NumberValue(\"3\") % 2" => "1")]
+    #[test_case("3 % 2" => "1")]
     #[test_case("Exact(null, \"\")" => "true")]
     #[test_case("null" => "")]
     #[test_case("eXaCt(null, Concat(null, null))" => "true")]
@@ -605,8 +609,9 @@ mod tests {
     #[test_case("Round(3.1416, 3)" => "3.142")]
     #[test_case("Round ( 3.1416, 4 )" => "3.1416")]
     #[test_case("Round(\"3.1416\", 5)" => "3.1416")]
-    //ROUND(NUMBERVALUE(NUMBERVALUE([prix]) * NUMBERVALUE(1.1)) + NUMBERVALUE(25), 2)
-    #[test_case("ROUND (NUMBERVALUE( 54.34 * 1.1), 2)" => "84.77")]
+    #[test_case("69.9 / NUMBERVALUE(1.2)" => "58.25")]
+    #[test_case("NUMBERVALUE(69.9) / NUMBERVALUE(1.2)" => "58.25")]
+    #[test_case("ROUND(NUMBERVALUE(69.9) / NUMBERVALUE(1.2), 2)" => "58.25")]
     #[test_case("GreaterThan(2, 3)" => "false")]
     #[test_case("Gt(3, 3)" => "false")]
     #[test_case("Gt(3, -1)" => "true")]
@@ -645,6 +650,9 @@ mod tests {
     #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"yyyy-MMMM-dd\")" => "2021-December-19")]
     #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"h:m:s\")" => " 4:39:57")]
     #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"H:m:s\")" => "16:39:57")]
+    #[test_case("SUBSTITUTE( SUBSTITUTE (SUBSTITUTE( \"caja\", \"anos\", \"ans\"),\"caja\", \"caisse\"), \"und\", \"unit\")" => "caisse")]
+    #[test_case("IIF(AreEquals(NUMBERVALUE(LEN(\"123456789012\")), NUMBERVALUE(12)), CONCATENATE(\"123456789012\", \"0\"), \"nope\")" => "1234567890120")]
+    #[test_case("IIF(NUMBERVALUE(LEN(\"123456789012\")) == NUMBERVALUE(12), CONCATENATE(\"123456789012\", \"0\"), \"nope\")" => "1234567890120")]
     // #[test_case("NowSpecificTimeZone(\"Saratov Standard Time\")" => "16:39:57")]
     // #[test_case("Today()" => "---")]
     // #[test_case("Time()" => "---")]
@@ -700,8 +708,8 @@ mod tests {
     #[test_case("Upper(Sum(2, now(42)))" => false)]
     #[test_case("Upper(Unkkkkkknown(2, now(42)))" => true)] // this one will always fail before calling now(), so it's determinist
     #[test_case("now(42)" => false)]
-    #[test_case("(1 + now(42))" => false)]
-    #[test_case("(Upper(\"\") + 2)" => true)]
+    #[test_case("1 + now(42)" => false)]
+    #[test_case("Upper(\"\") + 2" => true)]
     fn deterministic_or_not(expression: &str) -> bool {
         let expr = parse_expr(expression).unwrap();
         let expr = prepare_expr_and_identifiers(expr, &get_functions(), Rc::new(null_op));
@@ -718,7 +726,8 @@ mod tests {
         );
     }
 
-    fn null_op(_: RcExpr, _: RcExpr, _: AssocOp, _: &IdentifierValues) -> ExprFuncResult {
+    fn null_op(l: RcExpr, r: RcExpr, op: AssocOp, _: &IdentifierValues) -> ExprFuncResult {
+        dbg!(l, op, r, "RETURNS Null (null_op)");
         Ok(ExprResult::Null)
     }
 }

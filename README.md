@@ -36,7 +36,7 @@ c# expression parser in Rust
 - [x] Debug empty parameters list parsing (it's parsed as identifier right now) 
 - [x] Handle functions determinism
 - [x] Handle C# Assoc/Binary operators parsing (only delimited by parenthesis)
-- [ ] Handle C# Assoc/Binary operators execution
+- [x] Handle C# Assoc/Binary operators execution
 - [ ] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter (only stack overflow now)!
 - [ ] Handle operators precedence !
 - [ ] Replace &Vec usage by slices (have a look at f_operators)
@@ -45,6 +45,7 @@ c# expression parser in Rust
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [ ] Make all default String lazy static or &str
 - [x] Debug empty string parsing
+- [ ] Handle non usefull parenthesis (some tests to uncomment)
 - [ ] Debug snake case identifiers parsing
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
