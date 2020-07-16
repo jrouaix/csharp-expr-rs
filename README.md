@@ -35,16 +35,19 @@ c# expression parser in Rust
 - [x] Handle numeric types as Decimal/Money with 4 digits precision (have to find the right crate : https://crates.io/crates/rust_decimal ?)
 - [x] Debug empty parameters list parsing (it's parsed as identifier right now) 
 - [x] Handle functions determinism
+- [x] Debug empty string parsing
+- [x] refacto : remove all usage of `opt(sp)`, the take_while in sp() should be enough do the optional trick
+- [x] refacto : replace some preceded/terminated by 'delimited'
 - [x] Handle C# Assoc/Binary operators parsing (only delimited by parenthesis)
 - [x] Handle C# Assoc/Binary operators execution
-- [ ] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter
+- [x] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter
+- [ ] Make FFI parse fail to return an error and raise a nice exception AND not panicking ! 
+- [ ] Make C# FFI 1 char strings to Rust
 - [ ] Handle operators precedence !
 - [ ] Replace &Vec usage by slices (have a look at f_operators)
-- [x] refacto : replace some preceded/terminated by 'delimited'
-- [x] refacto : remove all usage of `opt(sp)`, the take_while in sp() should be enough do the optional trick
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [ ] Make all default String lazy static or &str
-- [x] Debug empty string parsing
+- [ ] comment out or remove dbg!()
 - [ ] Handle non usefull parenthesis (some tests to uncomment)
 - [ ] Debug snake case identifiers parsing
 - [ ] Debug Identifiers (Some tests are not passing)

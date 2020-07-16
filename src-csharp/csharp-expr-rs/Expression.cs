@@ -8,18 +8,45 @@ namespace csharp_expr_rs
 {
     static class StringExtensions
     {
-        public static FFICSharpString MakeFFICSharpString(this string str)
+        static Encoding unicode = new UnicodeEncoding();
+
+        public static FFICSharpStringHolder MakeFFICSharpStringHolder(this string str)
         {
-            if (str == null)
-                str = string.Empty;
+            if (str == null || str.Length == 0)
+            {
+                return new FFICSharpStringHolder
+                {
+                    ffiStr = new FFICSharpString { len = (UIntPtr)0 }
+                };
+            }
+
+            var result = new FFICSharpStringHolder
+            {
+                dotnetStr = str
+            };
 
             unsafe
             {
-                fixed (char* ptr = str)
+                var len = (UIntPtr)(str.Length * sizeof(char));
+
+                if (str.Length < 2)
                 {
-                    var len = (UIntPtr)(str.Length * sizeof(char));
-                    var sharpString = new FFICSharpString { ptr = ptr, len = len };
-                    return sharpString;
+                    result.shortStr = unicode.GetBytes(str);
+                    fixed (byte* ptr = result.shortStr)
+                    {
+                        var sharpString = new FFICSharpString { ptr = ptr, len = len };
+                        result.ffiStr = sharpString;
+                        return result;
+                    }
+                }
+                else
+                {
+                    fixed (char* ptr = result.dotnetStr)
+                    {
+                        var sharpString = new FFICSharpString { ptr = (byte*)ptr, len = len };
+                        result.ffiStr = sharpString;
+                        return result;
+                    }
                 }
             }
         }
@@ -29,7 +56,7 @@ namespace csharp_expr_rs
     {
         public void Test()
         {
-            Native.ffi_test("test".MakeFFICSharpString()).AsStringAndDispose();
+            Native.ffi_test("test".MakeFFICSharpStringHolder().ffiStr).AsStringAndDispose();
 
             //var pCh1 = test.GetPinnableReference();
             //byte* pc = (byte*)&pCh1;
@@ -45,7 +72,7 @@ namespace csharp_expr_rs
         private readonly HashSet<string> _identifiers;
 
         public Expression(string expression)
-            : this(Native.ffi_parse_and_prepare_expr(expression.MakeFFICSharpString()))
+            : this(Native.ffi_parse_and_prepare_expr(expression.MakeFFICSharpStringHolder().ffiStr))
         { }
 
         internal Expression(FFIExpressionHandle expressionFFIPointer)
@@ -72,23 +99,24 @@ namespace csharp_expr_rs
         {
             unsafe
             {
-                var idValues = identifierValues == null
-                    ? _emptyValues
-                    : identifierValues
+                var idValues = _emptyValues;
+
+                (string key, FFICSharpStringHolder holder)[] holders;
+
+                if (identifierValues != null)
+                {
+                    holders = identifierValues
                         .Where(kv => _identifiers.Contains(kv.Key))
-                        .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value.MakeFFICSharpString() })
+                        .Select(kv => (kv.Key, kv.Value.MakeFFICSharpStringHolder()))
                         .ToArray();
+                    idValues = holders
+                        .Select(h => new FFIIdentifierKeyValue { key = h.key, value = h.holder.ffiStr })
+                        .ToArray();
+                }
 
                 var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
                 var stringResult = result.GetContent().AsStringAndDispose();
                 return (result.is_error, stringResult);
-
-                //return default;
-
-                //Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length, out var result);
-
-                //var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
-                //return (false, "");
             }
         }
 

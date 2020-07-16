@@ -43,8 +43,15 @@ namespace csharp_expr_rs
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct FFICSharpString
     {
-        public char* ptr;
+        public byte* ptr;
         public UIntPtr len;
+    }
+
+    internal unsafe class FFICSharpStringHolder
+    {
+        public byte[] shortStr;
+        public string dotnetStr;
+        public FFICSharpString ffiStr;
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -55,21 +55,30 @@ namespace csharp_expr_rs.Tests
             {
                 Console.SetOut(sw);
 
-                var expression = new Expression("test");
-
-                try
+                using (var expression = new Expression("test"))
                 {
-                    var result = expression.Execute(new Dictionary<string, string>() { { "test", "42" } });
-                    _output.WriteLine(result.content);
-                    result.content.ShouldBe("42");
+                    (bool is_error, string content) result;
+                    try
+                    {
+                        result = expression.Execute(new Dictionary<string, string>() { { "test", "42" } });
+                        result.content.ShouldBe("42");
 
-                    result = expression.Execute(new Dictionary<string, string>() { { "test", "43" } });
-                    result.content.ShouldBe("43");
-                }
-                finally
-                {
-                    expression.Dispose();
-                    _output.WriteLine(sw.ToString());
+                        result = expression.Execute(new Dictionary<string, string>() { { "test", "43" } });
+                        result.content.ShouldBe("43");
+
+                        result = expression.Execute(new Dictionary<string, string>() { { "test", null } });
+                        result.content.ShouldBe("");
+
+                        result = expression.Execute(new Dictionary<string, string>() { { "test", "" } });
+                        result.content.ShouldBe("");
+
+                        result = expression.Execute(new Dictionary<string, string>() { { "test", "1" } });
+                        result.content.ShouldBe("1"); // returns ""
+                    }
+                    finally
+                    {
+                        _output.WriteLine(sw.ToString());
+                    }
                 }
             }
         }
