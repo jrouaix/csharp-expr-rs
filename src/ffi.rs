@@ -3,6 +3,7 @@ use crate::expressions::*;
 use once_cell::sync::Lazy;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::ptr;
 use std::rc::Rc;
 use std::slice;
 use std::vec::Vec;
@@ -35,16 +36,34 @@ fn string_from_csharp_string_ptr(s: FFICSharpString) -> String {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FFIParseResult {
+    is_error: bool,
+    error: *mut c_char,
+    content: *mut ExprAndIdentifiers,
+}
+
 #[no_mangle]
-extern "C" fn ffi_parse_and_prepare_expr(expression: FFICSharpString) -> *mut ExprAndIdentifiers {
+extern "C" fn ffi_parse_and_prepare_expr(expression: FFICSharpString) -> FFIParseResult {
     let r_str = string_from_csharp_string_ptr(expression);
-    println!("{}", r_str);
-    let expr = parse_expr(&r_str).unwrap();
-
-    let funcs = crate::functions::get_functions();
-
-    let expr = prepare_expr_and_identifiers(expr, &funcs, Rc::new(crate::functions::f_operators));
-    Box::into_raw(Box::new(expr))
+    let result = parse_expr(&r_str);
+    match result {
+        Err(err) => FFIParseResult {
+            is_error: true,
+            error: CString::new(err).unwrap().into_raw(),
+            content: ptr::null_mut(),
+        },
+        Ok(expr) => {
+            let funcs = crate::functions::get_functions();
+            let expr = prepare_expr_and_identifiers(expr, &funcs, Rc::new(crate::functions::f_operators));
+            FFIParseResult {
+                is_error: false,
+                error: ptr::null_mut(),
+                content: Box::into_raw(Box::new(expr)),
+            }
+        }
+    }
 }
 
 #[no_mangle]

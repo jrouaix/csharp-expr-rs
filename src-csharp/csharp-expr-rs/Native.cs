@@ -12,7 +12,7 @@ namespace csharp_expr_rs
         public const string LIB_NAME = "csharp_expr.dll";
 
         [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
-        public static extern FFIExpressionHandle ffi_parse_and_prepare_expr(FFICSharpString expression);
+        public static extern FFIParseResult ffi_parse_and_prepare_expr(FFICSharpString expression);
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_expr(IntPtr ptr);
 
@@ -24,8 +24,6 @@ namespace csharp_expr_rs
 
         [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
         public static extern FFIExecResult ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
-        [DllImport(LIB_NAME)]
-        public static extern bool get_last_is_error();
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_cstring(IntPtr ptr);
 
@@ -100,9 +98,33 @@ namespace csharp_expr_rs
         }
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct FFIParseResult
+    {
+        [MarshalAs(UnmanagedType.I1)]
+        public bool is_error;
+        public IntPtr error;
+        public IntPtr content;
+
+        public FFIExpressionHandle GetContent()
+        {
+            if (is_error)
+                throw new InvalidOperationException("Cannot get the content, it's an error");
+            return new FFIExpressionHandle(content);
+        }
+
+        public FFIStringHandle GetError()
+        {
+            if (!is_error)
+                throw new InvalidOperationException("Cannot get the content as string, it's not an error");
+            return new FFIStringHandle(error);
+        }
+    }
+
     internal class FFIExpressionHandle : SafeHandle
     {
         public FFIExpressionHandle() : base(IntPtr.Zero, true) { }
+        public FFIExpressionHandle(IntPtr intPtr) : base(intPtr, true) { }
 
         public override bool IsInvalid => false;
 

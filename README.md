@@ -41,8 +41,9 @@ c# expression parser in Rust
 - [x] Handle C# Assoc/Binary operators parsing (only delimited by parenthesis)
 - [x] Handle C# Assoc/Binary operators execution
 - [x] Handle C# Assoc/Binary operators parsing with no parenthesis delimiter
-- [ ] Make FFI parse fail to return an error and raise a nice exception AND not panicking ! 
+- [x] Make FFI parse fail to return an error and raise a nice exception AND not panicking ! 
 - [ ] Make C# FFI 1 char strings to Rust
+- [ ] sp() should get the new lines and allow the parsing to continue
 - [ ] Handle operators precedence !
 - [ ] Replace &Vec usage by slices (have a look at f_operators)
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors

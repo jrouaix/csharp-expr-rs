@@ -75,9 +75,15 @@ namespace csharp_expr_rs
             : this(Native.ffi_parse_and_prepare_expr(expression.MakeFFICSharpStringHolder().ffiStr))
         { }
 
-        internal Expression(FFIExpressionHandle expressionFFIPointer)
+        internal Expression(FFIParseResult FFIResultPointer)
         {
-            _expressionHandle = expressionFFIPointer;
+            if (FFIResultPointer.is_error)
+            {
+                var errorMsg = FFIResultPointer.GetError().AsStringAndDispose();
+                throw new ExpressionParsingException(errorMsg);
+            }
+
+            _expressionHandle = FFIResultPointer.GetContent();
             _identifiers = new HashSet<string>(
                 Native.ffi_get_identifiers(_expressionHandle)
                     .AsStringAndDispose()

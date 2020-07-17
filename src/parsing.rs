@@ -301,6 +301,12 @@ mod tests {
         }
     }
 
+    #[test]
+    fn parse_complex_str() {
+        let result = parse_expr("\"te sΓé¼t\tt ab\"");
+        assert_eq!(result, Ok(Expr::Str("te sΓé¼t\tt ab".to_string())));
+    }
+
     #[test_case("1" => Expr::Num(dec!(1)))]
     #[test_case("1.2" => Expr::Num(dec!(1.2)))]
     #[test_case("-0.42" => Expr::Num(dec!(-0.42)))]
@@ -348,6 +354,7 @@ mod tests {
     #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")]))]
     #[test_case("test(\"va lue\") - 3" => Expr::BinaryOperator(RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), rc_expr_num!(3), AssocOp::Subtract))]
     #[test_case("42 / test(\"va lue\")" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), AssocOp::Divide))]
+    #[test_case("42 \r\n \t / func()" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new( Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
     fn parse_complexe_expressions(expression: &'static str) -> Expr {
         let expr = expr::<(&str, ErrorKind)>(expression);
         match expr {
@@ -363,8 +370,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_insane_expressions() {
-        for complexity in 1..5 {
+    fn parse_insane_recursive_expressions() {
+        for complexity in 1..14 {
             let now = Instant::now();
             let mut expression = String::new();
             for i in 0..complexity {
@@ -380,6 +387,24 @@ mod tests {
             let (rest, _) = expr.unwrap();
             assert_eq!(rest.len(), 0);
             dbg!(complexity, &expression, now.elapsed());
+        }
+    }
+
+    #[test]
+    fn parse_insane_long_expressions() {
+        for complexity in 1..100 {
+            let _now = Instant::now();
+            let mut expression = String::new();
+            for i in 0..complexity {
+                if i != 0 {
+                    expression.push_str(" + ");
+                }
+                expression.push_str("Funk(true, 0, \"42\")");
+            }
+            let expr = expr::<(&str, ErrorKind)>(&expression);
+            let (rest, _) = expr.unwrap();
+            assert_eq!(rest.len(), 0);
+            // dbg!(complexity, &expression, _now.elapsed());
         }
     }
 }

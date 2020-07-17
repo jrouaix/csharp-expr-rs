@@ -49,6 +49,14 @@ namespace csharp_expr_rs.Tests
         }
 
         [Fact]
+        public void HandleParseError()
+        {
+            Should.NotThrow(() => new Expression("func()"));
+
+            Should.Throw<ExpressionParsingException>(() => new Expression("func() .. / \" wtf"));
+        }
+
+        [Fact]
         public void Get_identifier_value()
         {
             using (var sw = new StringWriter())
