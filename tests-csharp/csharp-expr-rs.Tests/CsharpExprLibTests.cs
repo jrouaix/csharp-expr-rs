@@ -40,8 +40,10 @@ namespace csharp_expr_rs.Tests
         }
 
         [Theory]
-        [InlineData("", true)]
+        [InlineData("22", true)]
         [InlineData("Today()", false)]
+        [InlineData("LocalDate(\"2019-08-06\")", true)]
+        [InlineData("DateFormat(LocalDate(\"2020-03-04\"), \"yyyy-MM-dd HH\")", true)]
         public void Determinism(string expr, bool determinist)
         {
             var expression = new Expression(expr);

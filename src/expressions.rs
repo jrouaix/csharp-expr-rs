@@ -460,6 +460,7 @@ mod tests {
     #[test_case("In(\"ok\", 42, true, \"ok\")" => "true")]
     #[test_case("In(42, 42, true, \"ok\")" => "true")]
     #[test_case("Like(42, 42)" => "true" )]
+    #[test_case("ISLIKE(\"https://www.matelas.com/195-sur-matelas.html#/2-dimensions-140x190\", \"#\")" => "true" )]
     #[test_case("Like(4242, \"4_42\")" => "true" )]
     #[test_case("Like(424, \"4_4%\")" => "true" )]
     #[test_case("Like(4242, \"%_42\")" => "true" )]
@@ -561,6 +562,7 @@ mod tests {
     #[test_case("NumberValue(\"2.3\")" => "2.3")]
     #[test_case("NumberValue(\"2z4\", \"z.\")" => "2.4")]
     #[test_case("Text(\"toto\")" => "toto")]
+    #[test_case("Capitalize(\"\")" => "")]
     #[test_case("Capitalize(\"toto\")" => "Toto")]
     #[test_case("Capitalize(\" once Upon a Time. in ? america ? Already upper case  ... y ! i    i . \")" => " Once Upon a Time. In ? America ? Already upper case  ... Y ! I    i . ")]
     #[test_case("StartsWith(\"toto\", \"t\")" => "true")]
@@ -657,6 +659,7 @@ mod tests {
     #[test_case("SUBSTITUTE( SUBSTITUTE (SUBSTITUTE( \"caja\", \"anos\", \"ans\"),\"caja\", \"caisse\"), \"und\", \"unit\")" => "caisse")]
     #[test_case("IIF(AreEquals(NUMBERVALUE(LEN(\"123456789012\")), NUMBERVALUE(12)), CONCATENATE(\"123456789012\", \"0\"), \"nope\")" => "1234567890120")]
     #[test_case("IIF(NUMBERVALUE(LEN(\"123456789012\")) == NUMBERVALUE(12), CONCATENATE(\"123456789012\", \"0\"), \"nope\")" => "1234567890120")]
+
     // #[test_case("NowSpecificTimeZone(\"Saratov Standard Time\")" => "16:39:57")]
     // #[test_case("Today()" => "---")]
     // #[test_case("Time()" => "---")]
@@ -713,6 +716,8 @@ mod tests {
     #[test_case("Upper(Unkkkkkknown(2, now(42)))" => true)] // this one will always fail before calling now(), so it's determinist
     #[test_case("now(42)" => false)]
     #[test_case("1 + now(42)" => false)]
+    #[test_case("LocalDate(\"2019-08-06\")" => true)]
+    #[test_case("DateFormat(LocalDate(\"2023-09-19\"), \"yyyy-MM-dd HH:mm:ss\")" => true)]
     #[test_case("Upper(\"\") + 2" => true)]
     fn deterministic_or_not(expression: &str) -> bool {
         let expr = parse_expr(expression).unwrap();

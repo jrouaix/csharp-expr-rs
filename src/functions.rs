@@ -232,7 +232,7 @@ fn make_case_insensitive_equals_regex(search_pattern: &str) -> Result<Regex, Str
 
 fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
     let mut result = String::new();
-    result.push('^');
+    // result.push('^');
 
     const ANY_MANY: &str = ".*";
     const ANY_ONE: &str = ".{1}";
@@ -283,7 +283,7 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
         _ => {}
     }
 
-    result.push('$');
+    // result.push('$');
     result
 }
 
@@ -1227,15 +1227,15 @@ mod tests {
         dotnet_format_to_strptime_format(dotnet_format)
     }
 
-    #[test_case("abcd" => "^abcd$")]
-    #[test_case("a_cd" => "^a.{1}cd$")]
-    #[test_case("ab%d" => "^ab.*d$")]
-    #[test_case("ab%%cd" => "^ab%cd$")]
-    #[test_case("_abc" => "^.{1}abc$")]
-    #[test_case("%abc" => "^.*abc$")]
-    #[test_case("def_" => "^def.{1}$")]
-    #[test_case("def%" => "^def.*$")]
-    #[test_case("_O__%%___%%%O%" => "^.{1}O_%_.{1}%.*O.*$")]
+    #[test_case("abcd" => "abcd")]
+    #[test_case("a_cd" => "a.{1}cd")]
+    #[test_case("ab%d" => "ab.*d")]
+    #[test_case("ab%%cd" => "ab%cd")]
+    #[test_case("_abc" => ".{1}abc")]
+    #[test_case("%abc" => ".*abc")]
+    #[test_case("def_" => "def.{1}")]
+    #[test_case("def%" => "def.*")]
+    #[test_case("_O__%%___%%%O%" => ".{1}O_%_.{1}%.*O.*")]
     fn test_like_pattern_to_regex_pattern(like_pattern: &str) -> String {
         like_pattern_to_regex_pattern(like_pattern)
     }
