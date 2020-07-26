@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using TimeZoneConverter;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -25,10 +26,27 @@ namespace csharp_expr_rs.Tests
 
 
         [Fact]
-        public void PrintTimezones()
+        public void PrintWindowsTimezonesToIanaTz()
         {
             var sb = new StringBuilder();
-            foreach (TimeZoneInfo z in TimeZoneInfo.GetSystemTimeZones())
+            foreach (var z in TimeZoneInfo.GetSystemTimeZones())
+            {
+                var iana = TZConvert.WindowsToIana(z.Id);
+                var chonotz = iana
+                    .Replace("Port-au-Prince", "PortauPrince")
+                    .Replace("/", "::").Replace("+", "Plus").Replace("-", "Minus");
+
+                string line = $"m.insert(\"{z.Id}\", chrono_tz::{chonotz});";
+                sb.AppendLine(line);
+                _output.WriteLine(line);
+            }
+        }
+
+        [Fact]
+        public void PrintWindowsTimezonesToOffsets()
+        {
+            var sb = new StringBuilder();
+            foreach (var z in TimeZoneInfo.GetSystemTimeZones())
             {
                 var offset = z.BaseUtcOffset;
                 var direction = (offset >= TimeSpan.Zero) ? "east" : "west";
