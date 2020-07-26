@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Text;
 
 namespace csharp_expr_rs
@@ -72,25 +73,43 @@ namespace csharp_expr_rs
         private readonly HashSet<string> _identifiers;
 
         public Expression(string expression)
-            : this(Native.ffi_parse_and_prepare_expr(expression.MakeFFICSharpStringHolder().ffiStr))
+            : this(PrepareExpression(expression))
         { }
 
-        internal Expression(FFIParseResult FFIResultPointer)
+        [HandleProcessCorruptedStateExceptions]
+        static (FFIExpressionHandle _expressionHandle, HashSet<string> _identifiers, bool isDeterministic) PrepareExpression(string expression)
         {
-            if (FFIResultPointer.is_error)
+            try
             {
-                var errorMsg = FFIResultPointer.GetError().AsStringAndDispose();
-                throw new ExpressionParsingException(errorMsg);
-            }
+                var FFIResultPointer = Native.ffi_parse_and_prepare_expr(expression.MakeFFICSharpStringHolder().ffiStr);
+                if (FFIResultPointer.is_error)
+                {
+                    var errorMsg = FFIResultPointer.GetError().AsStringAndDispose();
+                    throw new ExpressionParsingException(errorMsg);
+                }
 
-            _expressionHandle = FFIResultPointer.GetContent();
-            _identifiers = new HashSet<string>(
-                Native.ffi_get_identifiers(_expressionHandle)
-                    .AsStringAndDispose()
-                    .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                );
+                var expressionHandle = FFIResultPointer.GetContent();
+                var identifiers = new HashSet<string>(
+                    Native.ffi_get_identifiers(expressionHandle)
+                        .AsStringAndDispose()
+                        .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+                    );
+                var isDeterministic = Native.ffi_is_deterministic(expressionHandle);
+
+                return (expressionHandle, identifiers, isDeterministic);
+            }
+            catch (Exception ex)
+            {
+                throw new ExpressionParsingException(ex.Message, ex);
+            }
+        }
+
+        internal Expression((FFIExpressionHandle expressionHandle, HashSet<string> identifiers, bool isDeterministic) preparedExpression)
+        {
+            _expressionHandle = preparedExpression.expressionHandle;
+            _identifiers = preparedExpression.identifiers;
             Identifiers = _identifiers.ToArray();
-            IsDeterministic = Native.ffi_is_deterministic(_expressionHandle);
+            IsDeterministic = preparedExpression.isDeterministic;
         }
 
         public string[] Identifiers { get; }
@@ -101,28 +120,36 @@ namespace csharp_expr_rs
         public (bool is_error, string content) Execute(IReadOnlyDictionary<string, string> identifierValues)
             => Execute((IEnumerable<KeyValuePair<string, string>>)identifierValues);
 
+        [HandleProcessCorruptedStateExceptions]
         public (bool is_error, string content) Execute(IEnumerable<KeyValuePair<string, string>> identifierValues)
         {
-            unsafe
+            try
             {
-                var idValues = _emptyValues;
-
-                (string key, FFICSharpStringHolder holder)[] holders;
-
-                if (identifierValues != null)
+                unsafe
                 {
-                    holders = identifierValues
-                        .Where(kv => _identifiers.Contains(kv.Key))
-                        .Select(kv => (kv.Key, kv.Value.MakeFFICSharpStringHolder()))
-                        .ToArray();
-                    idValues = holders
-                        .Select(h => new FFIIdentifierKeyValue { key = h.key, value = h.holder.ffiStr })
-                        .ToArray();
-                }
+                    var idValues = _emptyValues;
 
-                var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
-                var stringResult = result.GetContent().AsStringAndDispose();
-                return (result.is_error, stringResult);
+                    (string key, FFICSharpStringHolder holder)[] holders;
+
+                    if (identifierValues != null)
+                    {
+                        holders = identifierValues
+                            .Where(kv => _identifiers.Contains(kv.Key))
+                            .Select(kv => (kv.Key, kv.Value.MakeFFICSharpStringHolder()))
+                            .ToArray();
+                        idValues = holders
+                            .Select(h => new FFIIdentifierKeyValue { key = h.key, value = h.holder.ffiStr })
+                            .ToArray();
+                    }
+
+                    var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
+                    var stringResult = result.GetContent().AsStringAndDispose();
+                    return (result.is_error, stringResult);
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new ExpressionInvokeException(ex.Message, ex);
             }
         }
 
