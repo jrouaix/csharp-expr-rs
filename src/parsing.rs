@@ -133,7 +133,7 @@ fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
 // }
 
 /// here, we apply the space parser before trying to parse a value
-fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     // dbg!("value", input);
     delimited(
         sp,
@@ -169,6 +169,12 @@ fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IRe
     )(input)
 }
 
+/// here, we apply the space parser before trying to parse a value
+fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    // dbg!("value_with_parenthesis", input);
+    alt((value_no_parenthesis, delimited(sp, delimited(char('('), value, char(')')), sp)))(input)
+}
+
 pub fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     value(input)
 }
@@ -178,7 +184,7 @@ mod tests {
     use super::*;
     use nom::error::ErrorKind;
     use rust_decimal_macros::*;
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
     use test_case::test_case;
 
     macro_rules! rc_expr_str {
@@ -207,6 +213,7 @@ mod tests {
     }
 
     #[test_case("1+2", (Expr::Num(dec!(1)), Expr::Num(dec!(2)), AssocOp::Add))]
+    // #[test_case("(3)+(4)", (Expr::Num(dec!(3)), Expr::Num(dec!(4)), AssocOp::Add))]
     #[test_case(" 3- 2 ", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Subtract))]
     #[test_case(" 3 /2", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Divide))]
     #[test_case("3|| 5 ", (Expr::Num(dec!(3)), Expr::Num(dec!(5)), AssocOp::LOr))]
@@ -310,6 +317,8 @@ mod tests {
     #[test_case("1" => Expr::Num(dec!(1)))]
     #[test_case("1.2" => Expr::Num(dec!(1.2)))]
     #[test_case("-0.42" => Expr::Num(dec!(-0.42)))]
+    #[test_case("(3.14)" => Expr::Num(dec!(3.14)))]
+    #[test_case("(((42)))" => Expr::Num(dec!(42)))]
     fn parse_num(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
@@ -320,6 +329,7 @@ mod tests {
     }
 
     #[test_case("a" => Expr::Identifier("a".to_string()))]
+    #[test_case("(b)" => Expr::Identifier("b".to_string()))]
     #[test_case("id" => Expr::Identifier("id".to_string()))]
     #[test_case(" hello " => Expr::Identifier("hello".to_string()))]
     #[test_case("@idarobase" => Expr::Identifier("idarobase".to_string()))]
@@ -332,11 +342,13 @@ mod tests {
     }
 
     #[test_case("[1,2]" => Expr::Array(vec![rc_expr_num!(1), rc_expr_num!(2)]))]
+    #[test_case("([3,4])" => Expr::Array(vec![rc_expr_num!(3), rc_expr_num!(4)]))]
     fn parse_array(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
     #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(2)]))]
+    #[test_case("(test( ( 3 ), (4)))" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(3), rc_expr_num!(4)]))]
     #[test_case("test ( 1 , 42 )" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(42)]))]
     #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
     #[test_case("test(test())" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))]))] // to debug
@@ -346,7 +358,7 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test([\"value\", 42, null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42), rc_expr_null!()])), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
+    #[test_case("test([\"value\", (42), null],2, \"null\")" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Array(vec![rc_expr_str!("value".to_string()), rc_expr_num!(42), rc_expr_null!()])), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
     #[test_case("hello" => Expr::Identifier("hello".to_string()))]
     #[test_case(" _hella " => Expr::Identifier("_hella".to_string()))]
     #[test_case(" helloworld " => Expr::Identifier("helloworld".to_string()))]
@@ -355,6 +367,7 @@ mod tests {
     #[test_case("test(\"va lue\") - 3" => Expr::BinaryOperator(RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), rc_expr_num!(3), AssocOp::Subtract))]
     #[test_case("42 / test(\"va lue\")" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), AssocOp::Divide))]
     #[test_case("42 \r\n \t / func()" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new( Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
+    #[test_case("(43 \r\n \t / ( func() ) )" => Expr::BinaryOperator(rc_expr_num!(43), RcExpr::new( Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
     fn parse_complexe_expressions(expression: &'static str) -> Expr {
         let expr = expr::<(&str, ErrorKind)>(expression);
         match expr {
@@ -371,7 +384,7 @@ mod tests {
 
     #[test]
     fn parse_insane_recursive_expressions() {
-        for complexity in 1..10 {
+        for complexity in 1..13 {
             let now = Instant::now();
             let mut expression = String::new();
             for i in 0..complexity {
