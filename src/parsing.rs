@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn parse_insane_recursive_expressions() {
-        for complexity in 1..14 {
+        for complexity in 1..10 {
             let now = Instant::now();
             let mut expression = String::new();
             for i in 0..complexity {

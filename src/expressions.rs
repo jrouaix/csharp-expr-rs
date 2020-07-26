@@ -212,7 +212,7 @@ impl Display for ExprResult {
             ExprResult::Str(s) => write!(f, "{}", s),
             ExprResult::Boolean(b) => write!(f, "{}", b),
             ExprResult::Num(n) => write!(f, "{}", n),
-            ExprResult::Date(d) => write!(f, "{}", d),
+            ExprResult::Date(d) => write!(f, "{:02}/{:02}/{:02} {:02}:{:02}:{:02}", d.month(), d.day(), d.year(), d.hour(), d.minute(), d.second()),
             ExprResult::TimeSpan(d) => {
                 let sign = if *d < Duration::zero() { "-" } else { "" };
                 let mut secs = d.num_seconds().abs();
@@ -630,11 +630,11 @@ mod tests {
     #[test_case("LowerThanOrEqual(2, 5)" => "true")]
     #[test_case("Ltoe(3, 3)" => "true")]
     #[test_case("Ltoe(3, -1)" => "false")]
-    #[test_case("Date(\"1996-12-19T16:39:57-08:00\")" => "1996-12-20 00:39:57")]
-    #[test_case("Date(\"1996-12-07T16:39:57Z\")" => "1996-12-07 16:39:57")]
-    #[test_case("Date(\"1996-12-07 16:39:57\")" => "1996-12-07 16:39:57")]
-    #[test_case("Date(\" 1996/12/07 16:39:58 \")" => "1996-12-07 16:39:58")]
-    #[test_case("Date(\"1996-12-07\")" => "1996-12-07 00:00:00")]
+    #[test_case("Date(\"1996-12-19T16:39:57-08:00\")" => "12/20/1996 00:39:57")]
+    #[test_case("Date(\"1996-12-07T16:39:57Z\")" => "12/07/1996 16:39:57")]
+    #[test_case("Date(\"1996-12-07 16:39:57\")" => "12/07/1996 16:39:57")]
+    #[test_case("Date(\" 1996/12/07 16:39:58 \")" => "12/07/1996 16:39:58")]
+    #[test_case("Date(\"1996-12-07\")" => "12/07/1996 00:00:00")]
     #[test_case("Year(\"1996-12-19T16:39:57-08:00\")" => "1996")]
     #[test_case("Month(\"1996-12-19T16:39:57-08:00\")" => "12")]
     #[test_case("Day(\"1996-12-19T16:39:57-08:00\")" => "20")]
@@ -642,14 +642,15 @@ mod tests {
     #[test_case("DateDiff(\"1996-12-07T16:39:58Z\", \"1996-12-07T16:39:57Z\")" => "00:00:01")]
     #[test_case("DateDiff(\"1996-12-07T16:39:57Z\", \"1996-12-02T16:40:52Z\")" => "4.23:59:05")]
     #[test_case("DateDiff(\"1996-12-07T16:39:57Z\", \"1996-12-09T16:39:57Z\")" => "-2.00:00:00")]
-    #[test_case("DateAddHours(Date(\"1996-12-19T16:39:57-08:00\"), -8)" => "1996-12-19 16:39:57")]
-    #[test_case("DateAddHours(\"1996-12-19T16:39:57-08:00\", -8.5)" => "1996-12-19 16:09:57")]
-    #[test_case("DateAddDays(\"1996-12-19T16:39:57-08:00\", 1.5)" => "1996-12-21 12:39:57")]
-    #[test_case("DateAddDays(\"1996-12-19T16:39:57-08:00\", -1.5)" => "1996-12-18 12:39:57")]
-    #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", 16)" => "1998-04-20 00:39:57")]
-    #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", -5)" => "1996-07-20 00:39:57")]
-    #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", -15)" => "1995-09-20 00:39:57")]
-    #[test_case("LocalDate(\"1996-12-19T16:39:57Z\", \"Romance Standard Time\")" => "1996-12-19 17:39:57")]
+    #[test_case("DateAddHours(Date(\"1996-12-19T16:39:57-08:00\"), -8)" => "12/19/1996 16:39:57")]
+    #[test_case("DateAddHours(\"1996-12-19T16:39:57-08:00\", -8.5)" => "12/19/1996 16:09:57")]
+    #[test_case("DateAddDays(\"1996-12-19T16:39:57-08:00\", 1.5)" => "12/21/1996 12:39:57")]
+    #[test_case("DateAddDays(\"1996-12-19T16:39:57-08:00\", -1.5)" => "12/18/1996 12:39:57")]
+    #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", 16)" => "04/20/1998 00:39:57")]
+    #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", -5)" => "07/20/1996 00:39:57")]
+    #[test_case("DateAddMonths(\"1996-12-19T16:39:57-08:00\", -15)" => "09/20/1995 00:39:57")]
+    #[test_case("LocalDate(\"1996-12-19T16:39:57Z\", \"Romance Standard Time\")" => "12/19/1996 17:39:57")]
+    #[test_case("LocalDate(\"1996-07-23T16:39:57Z\", \"Romance Standard Time\")" => "07/23/1996 18:39:57")]
     #[test_case("DateFormat(\"1996-12-19T16:39:57Z\")" => "1996-12-19 16:39:57.000")]
     #[test_case("DateFormat(\"1996-12-19T16:39:57.123Z\")" => "1996-12-19 16:39:57.123")]
     #[test_case("DateFormat(\"2021-12-19T16:39:57.123Z\", \"yyyy-MMM-mm\")" => "2021-Dec-39")]
@@ -659,7 +660,9 @@ mod tests {
     #[test_case("SUBSTITUTE( SUBSTITUTE (SUBSTITUTE( \"caja\", \"anos\", \"ans\"),\"caja\", \"caisse\"), \"und\", \"unit\")" => "caisse")]
     #[test_case("IIF(AreEquals(NUMBERVALUE(LEN(\"123456789012\")), NUMBERVALUE(12)), CONCATENATE(\"123456789012\", \"0\"), \"nope\")" => "1234567890120")]
     #[test_case("IIF(NUMBERVALUE(LEN(\"123456789012\")) == NUMBERVALUE(12), CONCATENATE(\"123456789012\", \"0\"), \"nope\")" => "1234567890120")]
-
+    #[test_case("Date(\"2020-07-14 13:00:00.000\")" => "07/14/2020 13:00:00")]
+    #[test_case("Date(\"2020-07-14 13:00:00\")" => "07/14/2020 13:00:00")]
+    #[test_case("Date(\"2020-07-14 08:18\")" =>  "07/14/2020 08:18:00")]
     // #[test_case("NowSpecificTimeZone(\"Saratov Standard Time\")" => "16:39:57")]
     // #[test_case("Today()" => "---")]
     // #[test_case("Time()" => "---")]

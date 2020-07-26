@@ -1,5 +1,6 @@
 use crate::expressions::*;
-use chrono::{prelude::*, Duration};
+use chrono::{prelude::*, Duration, TimeZone};
+use chrono_tz::Tz;
 use num_format::{Locale, ToFormattedString};
 use regex::{Regex, RegexBuilder};
 use rust_decimal::prelude::*;
@@ -122,37 +123,61 @@ fn exec_expr_to_date(
             match text.parse::<DateTime<Utc>>() {
                 Ok(dt) => return Ok(dt.naive_utc()),
                 Err(err) => {
-                    dbg!("DateTime<Utc> {}", err);
+                    //dbg!(&text, err);
                 }
             }
             match DateTime::parse_from_rfc2822(&text) {
                 Ok(dt) => return Ok(dt.naive_utc()),
                 Err(err) => {
-                    dbg!("DateTime::parse_from_rfc2822 {}", err);
+                    //dbg!(&text, err);
                 }
             }
             match text.parse::<NaiveDateTime>() {
                 Ok(dt) => return Ok(dt),
                 Err(err) => {
-                    dbg!("NaiveDateTime {}", err);
+                    //dbg!(&text, err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M:%S") {
                 Ok(dt) => return Ok(dt),
                 Err(err) => {
-                    dbg!("NaiveDateTime::parse_from_str {}", err);
+                    //dbg!(&text, err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M:%S") {
                 Ok(dt) => return Ok(dt),
                 Err(err) => {
-                    dbg!("NaiveDateTime::parse_from_str2 {}", err);
+                    //dbg!(&text, err);
+                }
+            }
+            match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M:%S%.f") {
+                Ok(dt) => return Ok(dt),
+                Err(err) => {
+                    //dbg!(&text, err);
+                }
+            }
+            match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M:%S%.f") {
+                Ok(dt) => return Ok(dt),
+                Err(err) => {
+                    //dbg!(&text, err);
+                }
+            }
+            match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M") {
+                Ok(dt) => return Ok(dt),
+                Err(err) => {
+                    dbg!(&text, err);
+                }
+            }
+            match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M") {
+                Ok(dt) => return Ok(dt),
+                Err(err) => {
+                    //dbg!(&text, err);
                 }
             }
             match text.parse::<NaiveDate>() {
                 Ok(dt) => return Ok(dt.and_hms(0, 0, 0)),
                 Err(err) => {
-                    dbg!("NaiveDate {}", err);
+                    //dbg!(&text, err);
                 }
             }
             Err(format!("The value '{}' is not a date.", text))?
@@ -232,7 +257,7 @@ fn make_case_insensitive_equals_regex(search_pattern: &str) -> Result<Regex, Str
 
 fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
     let mut result = String::new();
-    // result.push('^');
+    result.push('^');
 
     const ANY_MANY: &str = ".*";
     const ANY_ONE: &str = ".{1}";
@@ -283,7 +308,7 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
         _ => {}
     }
 
-    // result.push('$');
+    result.push('$');
     result
 }
 
@@ -1015,17 +1040,15 @@ fn f_time(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
 fn f_now_specific_timezone(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 0, 1, "NowSpecificTimeZone")?;
 
-    let now = Utc::now();
+    let now = Utc::now().naive_utc();
 
-    Ok(ExprResult::Date(match params.get(0) {
-        None => now.naive_utc(),
+    match params.get(0) {
+        None => Ok(ExprResult::Date(now)),
         Some(expr) => {
             let time_zone_name = exec_expr_to_string(expr, values)?;
-            let offset = get_utc_offset(&time_zone_name)?;
-            let new_dt = now.with_timezone(offset);
-            new_dt.naive_local()
+            naive_datetime_to_timezone(&now, &time_zone_name)
         }
-    }))
+    }
 }
 
 fn single_date_func<F: FnOnce(NaiveDateTime) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
@@ -1199,10 +1222,7 @@ fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     assert_between_params_count(params, 1, 2, "LocalDate")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     let time_zone_name = params.get(1).map_or(Ok("Romance Standard Time".into()), |expr| exec_expr_to_string(expr, values))?;
-
-    let offset = get_utc_offset(&time_zone_name)?;
-    let new_dt = DateTime::<Local>::from_utc(date_time, *offset);
-    Ok(ExprResult::Date(new_dt.naive_local()))
+    naive_datetime_to_timezone(&date_time, &time_zone_name)
 }
 
 // DateFormat
@@ -1227,15 +1247,15 @@ mod tests {
         dotnet_format_to_strptime_format(dotnet_format)
     }
 
-    #[test_case("abcd" => "abcd")]
-    #[test_case("a_cd" => "a.{1}cd")]
-    #[test_case("ab%d" => "ab.*d")]
-    #[test_case("ab%%cd" => "ab%cd")]
-    #[test_case("_abc" => ".{1}abc")]
-    #[test_case("%abc" => ".*abc")]
-    #[test_case("def_" => "def.{1}")]
-    #[test_case("def%" => "def.*")]
-    #[test_case("_O__%%___%%%O%" => ".{1}O_%_.{1}%.*O.*")]
+    #[test_case("abcd" => "^abcd$")]
+    #[test_case("a_cd" => "^a.{1}cd$")]
+    #[test_case("ab%d" => "^ab.*d$")]
+    #[test_case("ab%%cd" => "^ab%cd$")]
+    #[test_case("_abc" => "^.{1}abc$")]
+    #[test_case("%abc" => "^.*abc$")]
+    #[test_case("def_" => "^def.{1}$")]
+    #[test_case("def%" => "^def.*$")]
+    #[test_case("_O__%%___%%%O%" => "^.{1}O_%_.{1}%.*O.*$")]
     fn test_like_pattern_to_regex_pattern(like_pattern: &str) -> String {
         like_pattern_to_regex_pattern(like_pattern)
     }
@@ -1307,149 +1327,149 @@ fn dotnet_format_to_strptime_format(dotnet_format: &str) -> String {
 }
 
 // Could be replaced by ? https://github.com/chronotope/chrono-tz/
-fn get_utc_offset(time_zone_name: &str) -> Result<&'static FixedOffset, String> {
+fn get_utc_offset(time_zone_name: &str) -> Result<&'static Tz, String> {
     lazy_static! {
-        static ref TIME_ZONES: HashMap<&'static str, FixedOffset> = {
+        static ref TIME_ZONES: HashMap<&'static str, Tz> = {
             let mut m = HashMap::new();
-            m.insert("Dateline Standard Time", FixedOffset::west(43200));
-            m.insert("UTC-11", FixedOffset::west(39600));
-            m.insert("Aleutian Standard Time", FixedOffset::west(36000));
-            m.insert("Hawaiian Standard Time", FixedOffset::west(36000));
-            m.insert("Marquesas Standard Time", FixedOffset::west(34200));
-            m.insert("Alaskan Standard Time", FixedOffset::west(32400));
-            m.insert("UTC-09", FixedOffset::west(32400));
-            m.insert("Pacific Standard Time (Mexico)", FixedOffset::west(28800));
-            m.insert("UTC-08", FixedOffset::west(28800));
-            m.insert("Pacific Standard Time", FixedOffset::west(28800));
-            m.insert("US Mountain Standard Time", FixedOffset::west(25200));
-            m.insert("Mountain Standard Time (Mexico)", FixedOffset::west(25200));
-            m.insert("Mountain Standard Time", FixedOffset::west(25200));
-            m.insert("Central America Standard Time", FixedOffset::west(21600));
-            m.insert("Central Standard Time", FixedOffset::west(21600));
-            m.insert("Easter Island Standard Time", FixedOffset::west(21600));
-            m.insert("Central Standard Time (Mexico)", FixedOffset::west(21600));
-            m.insert("Canada Central Standard Time", FixedOffset::west(21600));
-            m.insert("SA Pacific Standard Time", FixedOffset::west(18000));
-            m.insert("Eastern Standard Time (Mexico)", FixedOffset::west(18000));
-            m.insert("Eastern Standard Time", FixedOffset::west(18000));
-            m.insert("Haiti Standard Time", FixedOffset::west(18000));
-            m.insert("Cuba Standard Time", FixedOffset::west(18000));
-            m.insert("US Eastern Standard Time", FixedOffset::west(18000));
-            m.insert("Turks And Caicos Standard Time", FixedOffset::west(18000));
-            m.insert("Paraguay Standard Time", FixedOffset::west(14400));
-            m.insert("Atlantic Standard Time", FixedOffset::west(14400));
-            m.insert("Venezuela Standard Time", FixedOffset::west(14400));
-            m.insert("Central Brazilian Standard Time", FixedOffset::west(14400));
-            m.insert("SA Western Standard Time", FixedOffset::west(14400));
-            m.insert("Pacific SA Standard Time", FixedOffset::west(14400));
-            m.insert("Newfoundland Standard Time", FixedOffset::west(12600));
-            m.insert("Tocantins Standard Time", FixedOffset::west(10800));
-            m.insert("E. South America Standard Time", FixedOffset::west(10800));
-            m.insert("SA Eastern Standard Time", FixedOffset::west(10800));
-            m.insert("Argentina Standard Time", FixedOffset::west(10800));
-            m.insert("Greenland Standard Time", FixedOffset::west(10800));
-            m.insert("Montevideo Standard Time", FixedOffset::west(10800));
-            m.insert("Magallanes Standard Time", FixedOffset::west(10800));
-            m.insert("Saint Pierre Standard Time", FixedOffset::west(10800));
-            m.insert("Bahia Standard Time", FixedOffset::west(10800));
-            m.insert("UTC-02", FixedOffset::west(7200));
-            m.insert("Mid-Atlantic Standard Time", FixedOffset::west(7200));
-            m.insert("Azores Standard Time", FixedOffset::west(3600));
-            m.insert("Cape Verde Standard Time", FixedOffset::west(3600));
-            m.insert("UTC", FixedOffset::east(0));
-            m.insert("GMT Standard Time", FixedOffset::east(0));
-            m.insert("Greenwich Standard Time", FixedOffset::east(0));
-            m.insert("Sao Tome Standard Time", FixedOffset::east(0));
-            m.insert("Morocco Standard Time", FixedOffset::east(0));
-            m.insert("W. Europe Standard Time", FixedOffset::east(3600));
-            m.insert("Central Europe Standard Time", FixedOffset::east(3600));
-            m.insert("Romance Standard Time", FixedOffset::east(3600));
-            m.insert("Central European Standard Time", FixedOffset::east(3600));
-            m.insert("W. Central Africa Standard Time", FixedOffset::east(3600));
-            m.insert("Jordan Standard Time", FixedOffset::east(7200));
-            m.insert("GTB Standard Time", FixedOffset::east(7200));
-            m.insert("Middle East Standard Time", FixedOffset::east(7200));
-            m.insert("Egypt Standard Time", FixedOffset::east(7200));
-            m.insert("E. Europe Standard Time", FixedOffset::east(7200));
-            m.insert("Syria Standard Time", FixedOffset::east(7200));
-            m.insert("West Bank Standard Time", FixedOffset::east(7200));
-            m.insert("South Africa Standard Time", FixedOffset::east(7200));
-            m.insert("FLE Standard Time", FixedOffset::east(7200));
-            m.insert("Israel Standard Time", FixedOffset::east(7200));
-            m.insert("Kaliningrad Standard Time", FixedOffset::east(7200));
-            m.insert("Sudan Standard Time", FixedOffset::east(7200));
-            m.insert("Libya Standard Time", FixedOffset::east(7200));
-            m.insert("Namibia Standard Time", FixedOffset::east(7200));
-            m.insert("Arabic Standard Time", FixedOffset::east(10800));
-            m.insert("Turkey Standard Time", FixedOffset::east(10800));
-            m.insert("Arab Standard Time", FixedOffset::east(10800));
-            m.insert("Belarus Standard Time", FixedOffset::east(10800));
-            m.insert("Russian Standard Time", FixedOffset::east(10800));
-            m.insert("E. Africa Standard Time", FixedOffset::east(10800));
-            m.insert("Iran Standard Time", FixedOffset::east(12600));
-            m.insert("Arabian Standard Time", FixedOffset::east(14400));
-            m.insert("Astrakhan Standard Time", FixedOffset::east(14400));
-            m.insert("Azerbaijan Standard Time", FixedOffset::east(14400));
-            m.insert("Russia Time Zone 3", FixedOffset::east(14400));
-            m.insert("Mauritius Standard Time", FixedOffset::east(14400));
-            m.insert("Saratov Standard Time", FixedOffset::east(14400));
-            m.insert("Georgian Standard Time", FixedOffset::east(14400));
-            m.insert("Volgograd Standard Time", FixedOffset::east(14400));
-            m.insert("Caucasus Standard Time", FixedOffset::east(14400));
-            m.insert("Afghanistan Standard Time", FixedOffset::east(16200));
-            m.insert("West Asia Standard Time", FixedOffset::east(18000));
-            m.insert("Ekaterinburg Standard Time", FixedOffset::east(18000));
-            m.insert("Pakistan Standard Time", FixedOffset::east(18000));
-            m.insert("Qyzylorda Standard Time", FixedOffset::east(18000));
-            m.insert("India Standard Time", FixedOffset::east(19800));
-            m.insert("Sri Lanka Standard Time", FixedOffset::east(19800));
-            m.insert("Nepal Standard Time", FixedOffset::east(20700));
-            m.insert("Central Asia Standard Time", FixedOffset::east(21600));
-            m.insert("Bangladesh Standard Time", FixedOffset::east(21600));
-            m.insert("Omsk Standard Time", FixedOffset::east(21600));
-            m.insert("Myanmar Standard Time", FixedOffset::east(23400));
-            m.insert("SE Asia Standard Time", FixedOffset::east(25200));
-            m.insert("Altai Standard Time", FixedOffset::east(25200));
-            m.insert("W. Mongolia Standard Time", FixedOffset::east(25200));
-            m.insert("North Asia Standard Time", FixedOffset::east(25200));
-            m.insert("N. Central Asia Standard Time", FixedOffset::east(25200));
-            m.insert("Tomsk Standard Time", FixedOffset::east(25200));
-            m.insert("China Standard Time", FixedOffset::east(28800));
-            m.insert("North Asia East Standard Time", FixedOffset::east(28800));
-            m.insert("Singapore Standard Time", FixedOffset::east(28800));
-            m.insert("W. Australia Standard Time", FixedOffset::east(28800));
-            m.insert("Taipei Standard Time", FixedOffset::east(28800));
-            m.insert("Ulaanbaatar Standard Time", FixedOffset::east(28800));
-            m.insert("Aus Central W. Standard Time", FixedOffset::east(31500));
-            m.insert("Transbaikal Standard Time", FixedOffset::east(32400));
-            m.insert("Tokyo Standard Time", FixedOffset::east(32400));
-            m.insert("North Korea Standard Time", FixedOffset::east(32400));
-            m.insert("Korea Standard Time", FixedOffset::east(32400));
-            m.insert("Yakutsk Standard Time", FixedOffset::east(32400));
-            m.insert("Cen. Australia Standard Time", FixedOffset::east(34200));
-            m.insert("AUS Central Standard Time", FixedOffset::east(34200));
-            m.insert("E. Australia Standard Time", FixedOffset::east(36000));
-            m.insert("AUS Eastern Standard Time", FixedOffset::east(36000));
-            m.insert("West Pacific Standard Time", FixedOffset::east(36000));
-            m.insert("Tasmania Standard Time", FixedOffset::east(36000));
-            m.insert("Vladivostok Standard Time", FixedOffset::east(36000));
-            m.insert("Lord Howe Standard Time", FixedOffset::east(37800));
-            m.insert("Bougainville Standard Time", FixedOffset::east(39600));
-            m.insert("Russia Time Zone 10", FixedOffset::east(39600));
-            m.insert("Magadan Standard Time", FixedOffset::east(39600));
-            m.insert("Norfolk Standard Time", FixedOffset::east(39600));
-            m.insert("Sakhalin Standard Time", FixedOffset::east(39600));
-            m.insert("Central Pacific Standard Time", FixedOffset::east(39600));
-            m.insert("Russia Time Zone 11", FixedOffset::east(43200));
-            m.insert("New Zealand Standard Time", FixedOffset::east(43200));
-            m.insert("UTC+12", FixedOffset::east(43200));
-            m.insert("Fiji Standard Time", FixedOffset::east(43200));
-            m.insert("Kamchatka Standard Time", FixedOffset::east(43200));
-            m.insert("Chatham Islands Standard Time", FixedOffset::east(45900));
-            m.insert("UTC+13", FixedOffset::east(46800));
-            m.insert("Tonga Standard Time", FixedOffset::east(46800));
-            m.insert("Samoa Standard Time", FixedOffset::east(46800));
-            m.insert("Line Islands Standard Time", FixedOffset::east(50400));
+            m.insert("Dateline Standard Time", chrono_tz::Etc::GMTPlus12);
+            m.insert("UTC-11", chrono_tz::Etc::GMTPlus11);
+            m.insert("Aleutian Standard Time", chrono_tz::America::Adak);
+            m.insert("Hawaiian Standard Time", chrono_tz::Pacific::Honolulu);
+            m.insert("Marquesas Standard Time", chrono_tz::Pacific::Marquesas);
+            m.insert("Alaskan Standard Time", chrono_tz::America::Anchorage);
+            m.insert("UTC-09", chrono_tz::Etc::GMTPlus9);
+            m.insert("Pacific Standard Time (Mexico)", chrono_tz::America::Tijuana);
+            m.insert("UTC-08", chrono_tz::Etc::GMTPlus8);
+            m.insert("Pacific Standard Time", chrono_tz::America::Los_Angeles);
+            m.insert("US Mountain Standard Time", chrono_tz::America::Phoenix);
+            m.insert("Mountain Standard Time (Mexico)", chrono_tz::America::Chihuahua);
+            m.insert("Mountain Standard Time", chrono_tz::America::Denver);
+            m.insert("Central America Standard Time", chrono_tz::America::Guatemala);
+            m.insert("Central Standard Time", chrono_tz::America::Chicago);
+            m.insert("Easter Island Standard Time", chrono_tz::Pacific::Easter);
+            m.insert("Central Standard Time (Mexico)", chrono_tz::America::Mexico_City);
+            m.insert("Canada Central Standard Time", chrono_tz::America::Regina);
+            m.insert("SA Pacific Standard Time", chrono_tz::America::Bogota);
+            m.insert("Eastern Standard Time (Mexico)", chrono_tz::America::Cancun);
+            m.insert("Eastern Standard Time", chrono_tz::America::New_York);
+            m.insert("Haiti Standard Time", chrono_tz::America::PortauPrince);
+            m.insert("Cuba Standard Time", chrono_tz::America::Havana);
+            m.insert("US Eastern Standard Time", chrono_tz::America::Indiana::Indianapolis);
+            m.insert("Turks And Caicos Standard Time", chrono_tz::America::Grand_Turk);
+            m.insert("Paraguay Standard Time", chrono_tz::America::Asuncion);
+            m.insert("Atlantic Standard Time", chrono_tz::America::Halifax);
+            m.insert("Venezuela Standard Time", chrono_tz::America::Caracas);
+            m.insert("Central Brazilian Standard Time", chrono_tz::America::Cuiaba);
+            m.insert("SA Western Standard Time", chrono_tz::America::La_Paz);
+            m.insert("Pacific SA Standard Time", chrono_tz::America::Santiago);
+            m.insert("Newfoundland Standard Time", chrono_tz::America::St_Johns);
+            m.insert("Tocantins Standard Time", chrono_tz::America::Araguaina);
+            m.insert("E. South America Standard Time", chrono_tz::America::Sao_Paulo);
+            m.insert("SA Eastern Standard Time", chrono_tz::America::Cayenne);
+            m.insert("Argentina Standard Time", chrono_tz::America::Argentina::Buenos_Aires);
+            m.insert("Greenland Standard Time", chrono_tz::America::Godthab);
+            m.insert("Montevideo Standard Time", chrono_tz::America::Montevideo);
+            m.insert("Magallanes Standard Time", chrono_tz::America::Punta_Arenas);
+            m.insert("Saint Pierre Standard Time", chrono_tz::America::Miquelon);
+            m.insert("Bahia Standard Time", chrono_tz::America::Bahia);
+            m.insert("UTC-02", chrono_tz::Etc::GMTPlus2);
+            m.insert("Mid-Atlantic Standard Time", chrono_tz::Etc::GMTPlus2);
+            m.insert("Azores Standard Time", chrono_tz::Atlantic::Azores);
+            m.insert("Cape Verde Standard Time", chrono_tz::Atlantic::Cape_Verde);
+            m.insert("UTC", chrono_tz::Etc::UTC);
+            m.insert("GMT Standard Time", chrono_tz::Europe::London);
+            m.insert("Greenwich Standard Time", chrono_tz::Atlantic::Reykjavik);
+            m.insert("Sao Tome Standard Time", chrono_tz::Africa::Sao_Tome);
+            m.insert("Morocco Standard Time", chrono_tz::Africa::Casablanca);
+            m.insert("W. Europe Standard Time", chrono_tz::Europe::Berlin);
+            m.insert("Central Europe Standard Time", chrono_tz::Europe::Budapest);
+            m.insert("Romance Standard Time", chrono_tz::Europe::Paris);
+            m.insert("Central European Standard Time", chrono_tz::Europe::Warsaw);
+            m.insert("W. Central Africa Standard Time", chrono_tz::Africa::Lagos);
+            m.insert("Jordan Standard Time", chrono_tz::Asia::Amman);
+            m.insert("GTB Standard Time", chrono_tz::Europe::Bucharest);
+            m.insert("Middle East Standard Time", chrono_tz::Asia::Beirut);
+            m.insert("Egypt Standard Time", chrono_tz::Africa::Cairo);
+            m.insert("E. Europe Standard Time", chrono_tz::Europe::Chisinau);
+            m.insert("Syria Standard Time", chrono_tz::Asia::Damascus);
+            m.insert("West Bank Standard Time", chrono_tz::Asia::Hebron);
+            m.insert("South Africa Standard Time", chrono_tz::Africa::Johannesburg);
+            m.insert("FLE Standard Time", chrono_tz::Europe::Kiev);
+            m.insert("Israel Standard Time", chrono_tz::Asia::Jerusalem);
+            m.insert("Kaliningrad Standard Time", chrono_tz::Europe::Kaliningrad);
+            m.insert("Sudan Standard Time", chrono_tz::Africa::Khartoum);
+            m.insert("Libya Standard Time", chrono_tz::Africa::Tripoli);
+            m.insert("Namibia Standard Time", chrono_tz::Africa::Windhoek);
+            m.insert("Arabic Standard Time", chrono_tz::Asia::Baghdad);
+            m.insert("Turkey Standard Time", chrono_tz::Europe::Istanbul);
+            m.insert("Arab Standard Time", chrono_tz::Asia::Riyadh);
+            m.insert("Belarus Standard Time", chrono_tz::Europe::Minsk);
+            m.insert("Russian Standard Time", chrono_tz::Europe::Moscow);
+            m.insert("E. Africa Standard Time", chrono_tz::Africa::Nairobi);
+            m.insert("Iran Standard Time", chrono_tz::Asia::Tehran);
+            m.insert("Arabian Standard Time", chrono_tz::Asia::Dubai);
+            m.insert("Astrakhan Standard Time", chrono_tz::Europe::Astrakhan);
+            m.insert("Azerbaijan Standard Time", chrono_tz::Asia::Baku);
+            m.insert("Russia Time Zone 3", chrono_tz::Europe::Samara);
+            m.insert("Mauritius Standard Time", chrono_tz::Indian::Mauritius);
+            m.insert("Saratov Standard Time", chrono_tz::Europe::Saratov);
+            m.insert("Georgian Standard Time", chrono_tz::Asia::Tbilisi);
+            m.insert("Volgograd Standard Time", chrono_tz::Europe::Volgograd);
+            m.insert("Caucasus Standard Time", chrono_tz::Asia::Yerevan);
+            m.insert("Afghanistan Standard Time", chrono_tz::Asia::Kabul);
+            m.insert("West Asia Standard Time", chrono_tz::Asia::Tashkent);
+            m.insert("Ekaterinburg Standard Time", chrono_tz::Asia::Yekaterinburg);
+            m.insert("Pakistan Standard Time", chrono_tz::Asia::Karachi);
+            m.insert("Qyzylorda Standard Time", chrono_tz::Asia::Qyzylorda);
+            m.insert("India Standard Time", chrono_tz::Asia::Kolkata);
+            m.insert("Sri Lanka Standard Time", chrono_tz::Asia::Colombo);
+            m.insert("Nepal Standard Time", chrono_tz::Asia::Kathmandu);
+            m.insert("Central Asia Standard Time", chrono_tz::Asia::Almaty);
+            m.insert("Bangladesh Standard Time", chrono_tz::Asia::Dhaka);
+            m.insert("Omsk Standard Time", chrono_tz::Asia::Omsk);
+            m.insert("Myanmar Standard Time", chrono_tz::Asia::Yangon);
+            m.insert("SE Asia Standard Time", chrono_tz::Asia::Bangkok);
+            m.insert("Altai Standard Time", chrono_tz::Asia::Barnaul);
+            m.insert("W. Mongolia Standard Time", chrono_tz::Asia::Hovd);
+            m.insert("North Asia Standard Time", chrono_tz::Asia::Krasnoyarsk);
+            m.insert("N. Central Asia Standard Time", chrono_tz::Asia::Novosibirsk);
+            m.insert("Tomsk Standard Time", chrono_tz::Asia::Tomsk);
+            m.insert("China Standard Time", chrono_tz::Asia::Shanghai);
+            m.insert("North Asia East Standard Time", chrono_tz::Asia::Irkutsk);
+            m.insert("Singapore Standard Time", chrono_tz::Asia::Singapore);
+            m.insert("W. Australia Standard Time", chrono_tz::Australia::Perth);
+            m.insert("Taipei Standard Time", chrono_tz::Asia::Taipei);
+            m.insert("Ulaanbaatar Standard Time", chrono_tz::Asia::Ulaanbaatar);
+            m.insert("Aus Central W. Standard Time", chrono_tz::Australia::Eucla);
+            m.insert("Transbaikal Standard Time", chrono_tz::Asia::Chita);
+            m.insert("Tokyo Standard Time", chrono_tz::Asia::Tokyo);
+            m.insert("North Korea Standard Time", chrono_tz::Asia::Pyongyang);
+            m.insert("Korea Standard Time", chrono_tz::Asia::Seoul);
+            m.insert("Yakutsk Standard Time", chrono_tz::Asia::Yakutsk);
+            m.insert("Cen. Australia Standard Time", chrono_tz::Australia::Adelaide);
+            m.insert("AUS Central Standard Time", chrono_tz::Australia::Darwin);
+            m.insert("E. Australia Standard Time", chrono_tz::Australia::Brisbane);
+            m.insert("AUS Eastern Standard Time", chrono_tz::Australia::Sydney);
+            m.insert("West Pacific Standard Time", chrono_tz::Pacific::Port_Moresby);
+            m.insert("Tasmania Standard Time", chrono_tz::Australia::Hobart);
+            m.insert("Vladivostok Standard Time", chrono_tz::Asia::Vladivostok);
+            m.insert("Lord Howe Standard Time", chrono_tz::Australia::Lord_Howe);
+            m.insert("Bougainville Standard Time", chrono_tz::Pacific::Bougainville);
+            m.insert("Russia Time Zone 10", chrono_tz::Asia::Srednekolymsk);
+            m.insert("Magadan Standard Time", chrono_tz::Asia::Magadan);
+            m.insert("Norfolk Standard Time", chrono_tz::Pacific::Norfolk);
+            m.insert("Sakhalin Standard Time", chrono_tz::Asia::Sakhalin);
+            m.insert("Central Pacific Standard Time", chrono_tz::Pacific::Guadalcanal);
+            m.insert("Russia Time Zone 11", chrono_tz::Asia::Kamchatka);
+            m.insert("New Zealand Standard Time", chrono_tz::Pacific::Auckland);
+            m.insert("UTC+12", chrono_tz::Etc::GMTMinus12);
+            m.insert("Fiji Standard Time", chrono_tz::Pacific::Fiji);
+            m.insert("Kamchatka Standard Time", chrono_tz::Asia::Kamchatka);
+            m.insert("Chatham Islands Standard Time", chrono_tz::Pacific::Chatham);
+            m.insert("UTC+13", chrono_tz::Etc::GMTMinus13);
+            m.insert("Tonga Standard Time", chrono_tz::Pacific::Tongatapu);
+            m.insert("Samoa Standard Time", chrono_tz::Pacific::Apia);
+            m.insert("Line Islands Standard Time", chrono_tz::Pacific::Kiritimati);
             m
         };
     };
@@ -1459,4 +1479,11 @@ fn get_utc_offset(time_zone_name: &str) -> Result<&'static FixedOffset, String> 
     } else {
         Err(format!("Unable to find a time zone named '{}'", time_zone_name))
     }
+}
+
+fn naive_datetime_to_timezone(datetime: &NaiveDateTime, time_zone_name: &str) -> ExprFuncResult {
+    let timezone = get_utc_offset(time_zone_name)?;
+    let local = timezone.from_utc_datetime(datetime);
+    dbg!(datetime, timezone, local);
+    Ok(ExprResult::Date(local.naive_local()))
 }
