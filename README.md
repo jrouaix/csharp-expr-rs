@@ -49,6 +49,7 @@ c# expression parser in Rust
 - [ ] Replace &Vec usage by slices (have a look at f_operators)
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [ ] Make all default String lazy static or &str
+- [ ] Box strings to avoid cloning them
 - [ ] comment out or remove dbg!()
 - [ ] Handle non usefull parenthesis (some tests to uncomment)
 - [ ] Debug snake case identifiers parsing

@@ -25,7 +25,7 @@ fn exec_expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, S
 fn expr_result_is_null(result: &ExprResult) -> bool {
     match result {
         ExprResult::Null => true,
-        ExprResult::Str(s) => s.len() == 0 || s.chars().all(|c| is_space(c)),
+        ExprResult::Str(s) => s.is_empty() || s.chars().all(|c| is_space(c)),
         _ => false,
     }
 }
@@ -57,11 +57,16 @@ fn exec_expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator:
         Ok(n)
     } else {
         let mut s = exec_expr_to_string(expr, values)?;
-        // if s.len() == 0 {
+        // if s.is_empty() {
         //     return Ok(dec!(0));
         // }
         if let Some(c) = decimal_separator {
             s = s.replace(c, ".")
+        } else {
+            // ok it's dummy but works our use cases
+            if s.contains(",") && !s.contains(".") {
+                s = s.replace(",", ".")
+            }
         }
         let n: ExprDecimal = s.parse().or_else(|_| Err(format!("The value '{}' is not a number.", s)))?;
         Ok(n)
@@ -165,7 +170,7 @@ fn exec_expr_to_date(
             match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M") {
                 Ok(dt) => return Ok(dt),
                 Err(err) => {
-                    dbg!(&text, err);
+                    //dbg!(&text, err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M") {
@@ -447,19 +452,21 @@ fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 // AreEquals
 fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "AreEquals")?;
-    let left = exec_expr(params.get(0).unwrap(), values)?;
-    let right = exec_expr(params.get(1).unwrap(), values)?;
-    let res = results_are_equals(&left, &right);
-    Ok(ExprResult::Boolean(res))
+    let equals = are_equals_internal(params, values)?;
+    Ok(ExprResult::Boolean(equals))
 }
 
 // AreNotEquals
 fn f_are_not_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "AreNotEquals")?;
-    let left = exec_expr(params.get(0).unwrap(), values)?;
-    let right = exec_expr(params.get(1).unwrap(), values)?;
-    let res = results_are_equals(&left, &right);
-    Ok(ExprResult::Boolean(!res))
+    let equals = are_equals_internal(params, values)?;
+    Ok(ExprResult::Boolean(!equals))
+}
+
+fn are_equals_internal(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String> {
+    let left = UniCase::new(exec_expr_to_string(params.get(0).unwrap(), values)?);
+    let right = UniCase::new(exec_expr_to_string(params.get(1).unwrap(), values)?);
+    Ok(left == right)
 }
 
 // In
@@ -556,6 +563,14 @@ fn f_substitute(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     let within_text = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let find_text = exec_expr_to_string(params.get(1).unwrap(), values)?;
     let replace_text = exec_expr_to_string(params.get(2).unwrap(), values)?;
+
+    if within_text.is_empty() && find_text.is_empty() {
+        return Ok(ExprResult::Str(replace_text));
+    }
+
+    if within_text.is_empty() || find_text.is_empty() {
+        return Ok(ExprResult::Str(within_text));
+    }
 
     let regex = make_case_insensitive_search_regex(&find_text)?;
     let replaced = regex.replace_all(&within_text, move |_c: &regex::Captures| replace_text.clone());
@@ -1484,6 +1499,6 @@ fn get_utc_offset(time_zone_name: &str) -> Result<&'static Tz, String> {
 fn naive_datetime_to_timezone(datetime: &NaiveDateTime, time_zone_name: &str) -> ExprFuncResult {
     let timezone = get_utc_offset(time_zone_name)?;
     let local = timezone.from_utc_datetime(datetime);
-    dbg!(datetime, timezone, local);
+    // dbg!(datetime, timezone, local);
     Ok(ExprResult::Date(local.naive_local()))
 }
