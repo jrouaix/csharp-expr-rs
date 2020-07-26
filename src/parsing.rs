@@ -20,10 +20,6 @@ use unescape::unescape;
 /// `Input -> IResult<Input, Output, Error>`, with `IResult` defined as:
 /// `type IResult<I, O, E = (I, ErrorKind)> = Result<(I, O), Err<E>>;`
 
-// fn not_space(s: &str) -> IResult<&str, &str> {
-//     is_not(" \t\r\n")(s)
-// }
-
 fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, AssocOp, E> {
     // dbg!("binary_operator", input);
     context(
@@ -77,14 +73,13 @@ fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a st
 /// boolean combinator
 fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool, E> {
     // dbg!("boolean", input);
-    alt((map(tag("false"), |_| false), map(tag("true"), |_| true)))(input)
+    context("boolean", alt((map(tag("false"), |_| false), map(tag("true"), |_| true))))(input)
 }
 
 /// null combinator
 fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     // dbg!("null", input);
-    let (i, _) = tag("null")(input)?;
-    Ok((i, Expr::Null))
+    context("null", map(tag("null"), |_| Expr::Null))(input)
 }
 
 /// array combinator
@@ -118,16 +113,15 @@ fn empty_parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a s
 
 fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
     // dbg!("function_call", input);
-    pair(identifier, alt((parameters, empty_parameters)))(input)
+    context("function_call", pair(identifier, alt((parameters, empty_parameters))))(input)
 }
 
 // fn identifier_only<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
 //     map(pair(identifier, not(preceded(sp, char('(')))), |(a, _b)| a)(input)
 // }
 
-/// here, we apply the space parser before trying to parse a value
 fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    // dbg!("value", input);
+    // dbg!("value_no_parenthesis", input);
     delimited(
         multispace0,
         alt((
@@ -144,7 +138,6 @@ fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&
     )(input)
 }
 
-/// here, we apply the space parser before trying to parse a value
 fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     // dbg!("non_binary_operation_value", input);
     delimited(
@@ -161,9 +154,9 @@ fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IRe
         multispace0,
     )(input)
 }
-/// here, we apply the space parser before trying to parse a value
+
 fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    // dbg!("value_with_parenthesis", input);
+    // dbg!("value", input);
     alt((value_no_parenthesis, delimited(multispace0, delimited(char('('), value, char(')')), multispace0)))(input)
 }
 
