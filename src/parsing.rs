@@ -3,7 +3,7 @@ use crate::expressions::*;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, is_a, is_not, tag, take_while, take_while1}, // escaped_transform
-    character::complete::{alphanumeric0, alphanumeric1, anychar, char, one_of},
+    character::complete::{alphanumeric0, alphanumeric1, anychar, char, multispace0, one_of},
     combinator::{cut, map, map_opt, not, opt, recognize},
     error::{context, ParseError},
     multi::many1,
@@ -24,19 +24,12 @@ use unescape::unescape;
 //     is_not(" \t\r\n")(s)
 // }
 
-/// spaces combinator
-fn sp<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    // dbg!("sp", input);
-    // is_a(" \t\r\n")(input) // not working
-    take_while(|c| " \t\r\n".contains(c))(input)
-}
-
 fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, AssocOp, E> {
     // dbg!("binary_operator", input);
     context(
         "binary_operator",
         delimited(
-            sp,
+            multispace0,
             alt((
                 map(tag("+"), |_| AssocOp::Add),
                 map(tag("-"), |_| AssocOp::Subtract),
@@ -52,7 +45,7 @@ fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a st
                 map(tag(">="), |_| AssocOp::GreaterEqual),
                 map(tag(">"), |_| AssocOp::Greater),
             )),
-            sp,
+            multispace0,
         ),
     )(input)
 }
@@ -114,13 +107,13 @@ fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Ve
 
 fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     // dbg!("identifier", input);
-    context("identifier", terminated(preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1)))), sp))(input)
+    context("identifier", terminated(preceded(opt(tag("@")), recognize(tuple((opt(tag("_")), alphanumeric1)))), multispace0))(input)
 }
 
 /// empty parameters
 fn empty_parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
     // dbg!("empty_parameters", input);
-    context("empty_parameters", map(tuple((char('('), sp, char(')'))), |_| vec![]))(input)
+    context("empty_parameters", map(tuple((char('('), multispace0, char(')'))), |_| vec![]))(input)
 }
 
 fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
@@ -136,7 +129,7 @@ fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
 fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     // dbg!("value", input);
     delimited(
-        sp,
+        multispace0,
         alt((
             map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
@@ -147,7 +140,7 @@ fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&
             map(identifier, |s| Expr::Identifier(s.to_string())),
             map(array, Expr::Array),
         )),
-        sp,
+        multispace0,
     )(input)
 }
 
@@ -155,7 +148,7 @@ fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&
 fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     // dbg!("non_binary_operation_value", input);
     delimited(
-        sp,
+        multispace0,
         alt((
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             null,
@@ -165,14 +158,13 @@ fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IRe
             map(identifier, |s| Expr::Identifier(s.to_string())),
             map(array, Expr::Array),
         )),
-        sp,
+        multispace0,
     )(input)
 }
-
 /// here, we apply the space parser before trying to parse a value
 fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     // dbg!("value_with_parenthesis", input);
-    alt((value_no_parenthesis, delimited(sp, delimited(char('('), value, char(')')), sp)))(input)
+    alt((value_no_parenthesis, delimited(multispace0, delimited(char('('), value, char(')')), multispace0)))(input)
 }
 
 pub fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
@@ -251,9 +243,9 @@ mod tests {
                 AssocOp::Divide,
             ),
         ));
-        // assert_eq!(value::<(&str, ErrorKind)>("3 / (5-\"2\")"), expected);
+        assert_eq!(value::<(&str, ErrorKind)>("3 / (5-\"2\")"), expected);
         assert_eq!(value::<(&str, ErrorKind)>("3 / 5-\"2\""), expected);
-        // assert_eq!(value::<(&str, ErrorKind)>("(3 / 5-\"2\")"), expected);
+        assert_eq!(value::<(&str, ErrorKind)>("(3 / 5-\"2\")"), expected);
     }
 
     #[test_case("true" => Expr::Boolean(true))]
@@ -262,10 +254,8 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    // #[test_case("(1 + 2)" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(2), AssocOp::Add))]
-    // #[test_case("(1 * 3)" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(3), AssocOp::Multiply))]
     #[test_case("1 + 2" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(2), AssocOp::Add))]
-    #[test_case("1 * 3" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(3), AssocOp::Multiply))]
+    #[test_case("(1 * 3)" => Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(3), AssocOp::Multiply))]
     fn parse_binary_operator(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
@@ -384,7 +374,7 @@ mod tests {
 
     #[test]
     fn parse_insane_recursive_expressions() {
-        for complexity in 1..13 {
+        for complexity in 12..13 {
             let now = Instant::now();
             let mut expression = String::new();
             for i in 0..complexity {
