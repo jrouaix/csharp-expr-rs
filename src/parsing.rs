@@ -46,14 +46,14 @@ fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a st
     )(input)
 }
 
-fn binary_operation<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (Expr, Expr, AssocOp), E> {
-    // dbg!("binary_operation", input);
-    context(
-        "binary_operation",
-        // delimited(opt(char('(')), map(tuple((non_binary_operation_value, binary_operator, value)), |x| (x.0, x.2, x.1)), opt(char(')'))),
-        map(tuple((non_binary_operation_value, binary_operator, value)), |x| (x.0, x.2, x.1)),
-    )(input)
-}
+// fn binary_operation<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (Expr, Expr, AssocOp), E> {
+//     // dbg!("binary_operation", input);
+//     context(
+//         "binary_operation",
+//         // delimited(opt(char('(')), map(tuple((non_binary_operation_value, binary_operator, value)), |x| (x.0, x.2, x.1)), opt(char(')'))),
+//         map(tuple((value_no_ope, binary_operator, value)), |x| (x.0, x.2, x.1)),
+//     )(input)
+// }
 
 // string parser from here : https://github.com/Geal/nom/issues/1075
 fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
@@ -120,12 +120,46 @@ fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
 //     map(pair(identifier, not(preceded(sp, char('(')))), |(a, _b)| a)(input)
 // }
 
-fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    // dbg!("value_no_parenthesis", input);
+// pub fn preceded2<I, O1, E: ParseError<I>, F, G>(inner: F) -> impl Fn(I) -> IResult<I, O1, E>
+// where
+//     F: Fn(I) -> IResult<I, O1, E>,
+//     I: Clone,
+// {
+//     alt((inner, delimited(multispace0, delimited(char('('), inner, char(')')), multispace0)))
+//     // move |input: I| {
+//     //     let (input, _) = first(input)?;
+//     //     second(input)
+//     // }
+// }
+
+// fn optional_parenthesis<I: Clone, O, E: ParseError<I>, F>(f: F) -> impl Fn(I) -> IResult<I, Option<O>, E>
+// where
+//     F: Fn(I) -> IResult<I, O, E>,
+// {
+//     preceded(first: F, second: G)
+//     move |input: I| alt((f, delimited(multispace0, delimited(char('('), f, char(')')), multispace0)))(input)
+//     // move |input: I| {
+//     //     let i = input.clone();
+//     //     match f(input) {
+//     //         Ok((i, o)) => Ok((i, Some(o))),
+//     //         Err(Err::Error(_)) => Ok((i, None)),
+//     //         Err(e) => Err(e),
+//     //     }
+//     // }
+// }
+
+fn binary_operations<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    let (i, first_operand) = value_no_ope(input)?;
+    let (i, then) = many1(tuple((binary_operator, value_no_ope)))(i)?;
+    let expr = then.into_iter().fold(first_operand, |acc, (op, val)| Expr::BinaryOperator(RcExpr::new(acc), RcExpr::new(val), op));
+    Ok((i, expr))
+}
+
+fn value_no_ope_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    // dbg!("value_no_ope_no_parenthesis", input);
     delimited(
         multispace0,
         alt((
-            map(binary_operation, |(left, right, op)| Expr::BinaryOperator(Rc::new(left), Rc::new(right), op)),
             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
             null,
             map(boolean, Expr::Boolean),
@@ -138,21 +172,14 @@ fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&
     )(input)
 }
 
-fn non_binary_operation_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    // dbg!("value_no_parenthesis", input);
+    alt((delimited(multispace0, binary_operations, multispace0), value_no_ope))(input)
+}
+
+fn value_no_ope<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     // dbg!("non_binary_operation_value", input);
-    delimited(
-        multispace0,
-        alt((
-            map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
-            null,
-            map(boolean, Expr::Boolean),
-            map_opt(string, |s| unescape(s).map(Expr::Str)),
-            map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
-            map(identifier, |s| Expr::Identifier(s.to_string())),
-            map(array, Expr::Array),
-        )),
-        multispace0,
-    )(input)
+    alt((value_no_ope_no_parenthesis, delimited(multispace0, delimited(char('('), value_no_ope, char(')')), multispace0)))(input)
 }
 
 fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
@@ -211,9 +238,10 @@ mod tests {
     #[test_case("2 <= 2", (Expr::Num(dec!(2)), Expr::Num(dec!(2)), AssocOp::LessEqual))]
     #[test_case("true && false", (Expr::Boolean(true), Expr::Boolean(false), AssocOp::LAnd))]
     #[test_case("false || true", (Expr::Boolean(false), Expr::Boolean(true), AssocOp::LOr))]
-    fn binary_operation_test(text: &str, expected: (Expr, Expr, AssocOp)) {
-        let result = binary_operation::<(&str, ErrorKind)>(text);
-        assert_eq!(result, Ok(("", expected)));
+    fn binary_operations_test(text: &str, expected: (Expr, Expr, AssocOp)) {
+        let result = binary_operations::<(&str, ErrorKind)>(text);
+        let (left, right, op) = expected;
+        assert_eq!(result, Ok(("", Expr::BinaryOperator(RcExpr::new(left), RcExpr::new(right), op))));
     }
 
     #[test_case("test()", Expr::FunctionCall("test".to_string(), VecRcExpr::new()))]
@@ -231,14 +259,14 @@ mod tests {
         let expected = Ok((
             "",
             Expr::BinaryOperator(
-                RcExpr::new(Expr::Num(dec!(3))),
-                RcExpr::new(Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(5))), RcExpr::new(Expr::Str("2".to_string())), AssocOp::Subtract)),
-                AssocOp::Divide,
+                RcExpr::new(Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(3))), RcExpr::new(Expr::Num(dec!(5))), AssocOp::Divide)),
+                RcExpr::new(Expr::Str("2".to_string())),
+                AssocOp::Subtract,
             ),
         ));
-        assert_eq!(value::<(&str, ErrorKind)>("3 / (5-\"2\")"), expected);
         assert_eq!(value::<(&str, ErrorKind)>("3 / 5-\"2\""), expected);
         assert_eq!(value::<(&str, ErrorKind)>("(3 / 5-\"2\")"), expected);
+        // assert_eq!(value::<(&str, ErrorKind)>("(3 / 5) -\"2\""), expected);
     }
 
     #[test_case("true" => Expr::Boolean(true))]
@@ -334,7 +362,7 @@ mod tests {
     #[test_case("(test( ( 3 ), (4)))" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(3), rc_expr_num!(4)]))]
     #[test_case("test ( 1 , 42 )" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(42)]))]
     #[test_case("test()" => Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))] // to debug
-    #[test_case("test(test())" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))]))] // to debug
+    #[test_case("test((test()))" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::FunctionCall("test".to_string(), Vec::<RcExpr>::new()))]))] // to debug
     #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
     #[test_case("Test(42)" => Expr::FunctionCall("Test".to_string(), vec![Rc::new(Expr::Num(dec!(42)))]))]
     fn parse_function_call(expression: &str) -> Expr {
@@ -367,8 +395,7 @@ mod tests {
 
     #[test]
     fn parse_insane_recursive_expressions() {
-        for complexity in 12..13 {
-            let now = Instant::now();
+        for complexity in 1..10 {
             let mut expression = String::new();
             for i in 0..complexity {
                 expression.push_str("Funk(true, 0, ");
@@ -379,6 +406,7 @@ mod tests {
             for _ in 0..complexity {
                 expression.push_str(")");
             }
+            let now = Instant::now();
             let expr = expr::<(&str, ErrorKind)>(&expression);
             let (rest, _) = expr.unwrap();
             assert_eq!(rest.len(), 0);
@@ -389,7 +417,6 @@ mod tests {
     #[test]
     fn parse_insane_long_expressions() {
         for complexity in 1..100 {
-            let _now = Instant::now();
             let mut expression = String::new();
             for i in 0..complexity {
                 if i != 0 {
@@ -397,6 +424,7 @@ mod tests {
                 }
                 expression.push_str("Funk(true, 0, \"42\")");
             }
+            let _now = Instant::now();
             let expr = expr::<(&str, ErrorKind)>(&expression);
             let (rest, _) = expr.unwrap();
             assert_eq!(rest.len(), 0);
