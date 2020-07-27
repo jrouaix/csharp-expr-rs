@@ -20,54 +20,24 @@ use unescape::unescape;
 /// `Input -> IResult<Input, Output, Error>`, with `IResult` defined as:
 /// `type IResult<I, O, E = (I, ErrorKind)> = Result<(I, O), Err<E>>;`
 
-fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, AssocOp, E> {
-    // dbg!("binary_operator", input);
-    context(
-        "binary_operator",
-        delimited(
-            multispace0,
-            alt((
-                map(tag("+"), |_| AssocOp::Add),
-                map(tag("-"), |_| AssocOp::Subtract),
-                map(tag("*"), |_| AssocOp::Multiply),
-                map(tag("/"), |_| AssocOp::Divide),
-                map(tag("%"), |_| AssocOp::Modulus),
-                map(tag("&&"), |_| AssocOp::LAnd),
-                map(tag("||"), |_| AssocOp::LOr),
-                map(tag("=="), |_| AssocOp::Equal),
-                map(tag("<="), |_| AssocOp::LessEqual),
-                map(tag("<"), |_| AssocOp::Less),
-                map(tag("!="), |_| AssocOp::NotEqual),
-                map(tag(">="), |_| AssocOp::GreaterEqual),
-                map(tag(">"), |_| AssocOp::Greater),
-            )),
-            multispace0,
-        ),
-    )(input)
-}
-
-// fn binary_operation<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (Expr, Expr, AssocOp), E> {
-//     // dbg!("binary_operation", input);
-//     context(
-//         "binary_operation",
-//         // delimited(opt(char('(')), map(tuple((non_binary_operation_value, binary_operator, value)), |x| (x.0, x.2, x.1)), opt(char(')'))),
-//         map(tuple((value_no_ope, binary_operator, value)), |x| (x.0, x.2, x.1)),
-//     )(input)
-// }
-
 // string parser from here : https://github.com/Geal/nom/issues/1075
-fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    // dbg!("parse_str", input);
-    escaped(
-        take_while1(|c| c != '\\' && c != '"'),
-        '\\',
-        one_of("\"\\/bfnrtu"), // Note, this will not detect invalid unicode escapes.
-    )(input)
-}
-
 fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     // dbg!("string", input);
-    context("string", delimited(char('\"'), cut(map(opt(parse_str), |o| o.unwrap_or_default())), char('\"')))(input)
+    context(
+        "string",
+        delimited(
+            char('\"'),
+            cut(map(
+                opt(escaped(
+                    take_while1(|c| c != '\\' && c != '"'),
+                    '\\',
+                    one_of("\"\\/bfnrtu"), // Note, this will not detect invalid unicode escapes.
+                )),
+                |o| o.unwrap_or_default(),
+            )),
+            char('\"'),
+        ),
+    )(input)
 }
 
 /// boolean combinator
@@ -147,6 +117,32 @@ fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
 //     //     }
 //     // }
 // }
+
+fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, AssocOp, E> {
+    // dbg!("binary_operator", input);
+    context(
+        "binary_operator",
+        delimited(
+            multispace0,
+            alt((
+                map(tag("+"), |_| AssocOp::Add),
+                map(tag("-"), |_| AssocOp::Subtract),
+                map(tag("*"), |_| AssocOp::Multiply),
+                map(tag("/"), |_| AssocOp::Divide),
+                map(tag("%"), |_| AssocOp::Modulus),
+                map(tag("&&"), |_| AssocOp::LAnd),
+                map(tag("||"), |_| AssocOp::LOr),
+                map(tag("=="), |_| AssocOp::Equal),
+                map(tag("<="), |_| AssocOp::LessEqual),
+                map(tag("<"), |_| AssocOp::Less),
+                map(tag("!="), |_| AssocOp::NotEqual),
+                map(tag(">="), |_| AssocOp::GreaterEqual),
+                map(tag(">"), |_| AssocOp::Greater),
+            )),
+            multispace0,
+        ),
+    )(input)
+}
 
 fn binary_operations<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     let (i, first_operand) = value_no_ope(input)?;
