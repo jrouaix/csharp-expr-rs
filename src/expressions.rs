@@ -108,7 +108,6 @@ pub enum Expr {
     Boolean(bool),                                                                // true | false
     Num(ExprDecimal),                                                             // 123.45
     Null,                                                                         // null
-    Array(VecRcExpr),                                                             // [null, 42, "text"]
     Identifier(String),                                                           // varToto
     FunctionCall(String, VecRcExpr),                                              // func(42, "text")
     PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>),                    // func(42, "text") + *func()
@@ -143,7 +142,7 @@ impl fmt::Debug for Expr {
             Expr::Boolean(x) => write!(f, "Boolean({:?})", x),
             Expr::Num(x) => write!(f, "Num({:?})", x),
             Expr::Null => write!(f, "Null"),
-            Expr::Array(x) => write!(f, "Array({:?})", x),
+            // Expr::Array(x) => write!(f, "Array({:?})", x),
             Expr::Identifier(x) => write!(f, "Identifier({:?})", x),
             Expr::FunctionCall(s, x) => write!(f, "FunctionCall({:?},{:?})", s, x),
             Expr::PreparedFunctionCall(s, x, _) => write!(f, "PreparedFunctionCall({:?},{:?})", s, x),
@@ -159,7 +158,7 @@ impl cmp::PartialEq for Expr {
             (Expr::Str(x_a), Expr::Str(x_b)) => x_a == x_b,
             (Expr::Boolean(x_a), Expr::Boolean(x_b)) => x_a == x_b,
             (Expr::Num(x_a), Expr::Num(x_b)) => x_a == x_b,
-            (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
+            // (Expr::Array(x_a), Expr::Array(x_b)) => x_a == x_b,
             (Expr::Identifier(x_a), Expr::Identifier(x_b)) => x_a == x_b,
             (Expr::BinaryOperator(left_a, right_a, op_a), Expr::BinaryOperator(left_b, right_b, op_b)) => left_a == left_b && right_a == right_b && op_a == op_b,
             (Expr::PreparedBinaryOperator(left_a, right_a, op_a, _), Expr::PreparedBinaryOperator(left_b, right_b, op_b, _)) => left_a == left_b && right_a == right_b && op_a == op_b,
@@ -192,7 +191,7 @@ impl Display for Expr {
             Expr::Boolean(b) => write!(f, "{}", b),
             Expr::Num(n) => write!(f, "{}", n),
             Expr::Null => write!(f, ""),
-            Expr::Array(_) => write!(f, "Array"),
+            // Expr::Array(_) => write!(f, "Array"),
             Expr::Identifier(i) => write!(f, "@{}", i),
             Expr::FunctionCall(_, _) => write!(f, "FunctionCall"),
             Expr::PreparedFunctionCall(_, _, _) => write!(f, "PreparedFunctionCall"),
@@ -296,10 +295,10 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
                 RcExpr::new(Expr::PreparedBinaryOperator(left_prepared.1, right_prepared.1, *op, Rc::clone(&operators))),
             )
         }
-        Expr::Array(elements) => {
-            let (determinism, prepared_list) = prepare_expr_list(elements, funcs, identifiers, operators);
-            (determinism, Rc::new(Expr::Array(prepared_list)))
-        }
+        // Expr::Array(elements) => {
+        //     let (determinism, prepared_list) = prepare_expr_list(elements, funcs, identifiers, operators);
+        //     (determinism, Rc::new(Expr::Array(prepared_list)))
+        // }
         Expr::Str(_) => (FunctionDeterminism::Deterministic, expr),
         Expr::Boolean(_) => (FunctionDeterminism::Deterministic, expr),
         Expr::Num(_) => (FunctionDeterminism::Deterministic, expr),
@@ -315,7 +314,7 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<E
         Expr::Boolean(b) => Ok(ExprResult::Boolean(*b)),
         Expr::Num(f) => Ok(ExprResult::Num(*f)),
         Expr::Null => Ok(ExprResult::Null),
-        Expr::Array(_) => Ok(ExprResult::NonExecuted(expr.clone())),
+        // Expr::Array(_) => Ok(ExprResult::NonExecuted(expr.clone())),
         Expr::Identifier(name) => match &values.get(&UniCase::new(name.into())) {
             Some(s) => Ok(ExprResult::Str(s())),
             None => Err(format!("Unable to find value for identifier named '{}'", name)),
