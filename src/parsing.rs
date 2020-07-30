@@ -130,270 +130,142 @@ fn lexer<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Lex, E>
 
 #[derive(Debug)]
 struct ParserMachine {
-    parenthesis_count: usize,
-    state: ParsingState,
+    parsers: Vec<Parser>,
 }
 
 impl ParserMachine {
-    fn start() -> ParserMachine {
+    fn new() -> ParserMachine {
         ParserMachine {
-            parenthesis_count: 0,
-            state: ParsingState::Started,
+            parsers: vec![ParserMachine::new_parser()],
         }
     }
+    fn new_parser() -> Parser {
+        Parser { state: ParsingState::Started }
+    }
+
+    fn current_parser<'a>(&'a mut self) -> &'a mut Parser {
+        let last_position = self.parsers.len() - 1;
+        self.parsers.get_mut(last_position).unwrap()
+    }
+
     fn open_parenthesis(&mut self) {
-        match &self.state {
-            ParsingState::Expr(Expr::Identifier(s)) => self.state = ParsingState::Function(s.clone(), RefCell::new(vec![])),
-            _ => self.parenthesis_count += 1,
+        let current = self.current_parser();
+        match &current.state {
+            ParsingState::Identifier(s) => current.state = ParsingState::Function(s.clone(), RefCell::new(vec![]), false),
+            _ => self.parsers.push(ParserMachine::new_parser()),
         }
     }
+
+    fn identifier(&mut self, name: String) {
+        let current = self.current_parser();
+        match &current.state {
+            ParsingState::Started => {
+                current.state = ParsingState::Identifier(name);
+            }
+            _ => todo!(), // Unable to handle an identifier here
+        }
+    }
+
+    fn comma(&mut self) {
+        let current = self.current_parser();
+        match &current.state {
+            ParsingState::Function(s, p, false) => {
+                current.state = ParsingState::Function(s.clone(), p.clone(), true);
+            }
+            _ => todo!(), // Unable to handle a comma ',' here
+        }
+    }
+
+    fn expression(&mut self, expr: Expr) {
+        let current = self.current_parser();
+        match &current.state {
+            ParsingState::Function(s, p, true) => {
+                p.borrow_mut().push(RcExpr::new(expr));
+                current.state = ParsingState::Function(s.clone(), p.clone(), true);
+            }
+            ParsingState::AwaitingNextOperand(e, op) => {
+                current.state = ParsingState::Expr(Expr::BinaryOperator(RcExpr::new(e.clone()), RcExpr::new(expr), op.clone()));
+            }
+            ParsingState::Started => {
+                current.state = ParsingState::Expr(expr);
+            }
+            _ => todo!(), // Unable to handle an expression here
+        }
+    }
+
+    fn operator(&mut self, op: AssocOp) {
+        let current = self.current_parser();
+        match &current.state {
+            ParsingState::Expr(e) => current.state = ParsingState::AwaitingNextOperand(e.clone(), op),
+            _ => todo!(), // Unable to add an operator here
+        };
+    }
+
     fn close_parenthesis(&mut self) {
-        self.parenthesis_count -= 1;
+        let mut current = self.parsers.pop().unwrap();
+        if let ParsingState::Function(s, p, _) = current.state {
+            // let's be permisive on writing some more comma like func(1,2,3,)
+            let parameters = p.clone().into_inner();
+            current.state = ParsingState::Expr(Expr::FunctionCall(s.clone(), parameters));
+            self.parsers.push(current);
+            return;
+        }
+
+        let current = self.parsers.pop().unwrap();
+        if let ParsingState::Expr(expr) = current.state {
+            self.expression(expr.clone());
+        }
     }
-    fn add_expr(&mut self, expr: Expr) {
-        match &self.state {
-            ParsingState::Started => self.state = ParsingState::Expr(expr),
-            ParsingState::AwaitingNextOperand(e, op) => self.state = ParsingState::Expr(Expr::BinaryOperator(RcExpr::new(e.clone()), RcExpr::new(expr), op.clone())),
-            ParsingState::Function(_name, parameters) => parameters.borrow_mut().push(RcExpr::new(expr)),
-            _ => todo!(), // Err("Unable to add the expression".into()),
-        };
+
+    fn finalize(mut self) -> Expr {
+        if self.parsers.len() != 1 {
+            todo!();
+        }
+
+        let result = self.parsers.pop().unwrap();
+
+        match result.state {
+            ParsingState::Expr(e) => e,
+            _ => todo!(), // Missing something
+        }
     }
-    fn add_operator(&mut self, op: AssocOp) {
-        match &self.state {
-            ParsingState::Expr(e) => self.state = ParsingState::AwaitingNextOperand(e.clone(), op),
-            _ => todo!(), //Err("Unable to add an operator".into()),
-        };
-    }
-    fn handle_comma(&mut self) {
-        match &self.state {
-            ParsingState::Function(_, _) => {}
-            _ => todo!(), //Err("Unable to add an operator".into()),
-        };
-    }
+}
+
+#[derive(Debug)]
+struct Parser {
+    state: ParsingState,
 }
 
 #[derive(Debug)]
 enum ParsingState {
     Started,
+    Identifier(String),
     Expr(Expr),
     AwaitingNextOperand(Expr, AssocOp),
-    Function(String, RefCell<VecRcExpr>),
+    Function(String, RefCell<VecRcExpr>, bool),
 }
 
 fn parser<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-    let mut machine = ParserMachine::start();
+    let mut machine = ParserMachine::new();
 
     let (input, _) = multispace0(input)?;
+    let mut input = input;
     while input.len() != 0 {
-        let (input, lex) = lexer(input)?;
+        let (i, lex) = lexer(input)?;
         match lex {
             Lex::ParenthesisOpen => machine.open_parenthesis(),
             Lex::ParenthesisClose => machine.close_parenthesis(),
-            Lex::Expr(e) => {
-                machine.add_expr(e);
-            }
-            Lex::Op(op) => machine.add_operator(op),
-            Lex::Comma => machine.handle_comma(),
-            Lex::Identifier(s) => todo!(),
-            // Lex::Identifier() => todo!(),
+            Lex::Expr(e) => machine.expression(e),
+            Lex::Op(op) => machine.operator(op),
+            Lex::Comma => machine.comma(),
+            Lex::Identifier(s) => machine.identifier(s),
         }
-        let (input, _) = multispace0(input)?;
+        let (i, _) = multispace0(i)?;
+        input = i;
     }
 
-    // let (input, _) = multispace0(input)?;
-
-    // let (input, first_operand) = no_ope_value(input)?;
-    // let (input, _) = multispace0(input)?;
-    // let mut rest = input;
-    // let mut others = vec![];
-    // while rest.len() != 0 {
-    //     let (input, op) = binary_operator(rest)?;
-    //     let (input, _) = multispace0(input)?;
-    //     let (input, other) = no_ope_value(input)?;
-    //     let (input, _) = multispace0(input)?;
-    //     others.push((op, other));
-    //     rest = input;
-    // }
-    // let expr = others.into_iter().fold(first_operand, |acc, (op, val)| Expr::BinaryOperator(RcExpr::new(acc), RcExpr::new(val), op));
-    // Ok((rest, expr))
-    todo!();
+    Ok((input, machine.finalize()))
 }
-
-// /// parameters between parenthesis
-// fn comma_separated_values<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-//     // dbg!("comma_separated_values", input);
-//     context("comma_separated_values", map(separated_list(char(','), main_parser), |v| v.into_iter().map(Rc::new).collect()))(input)
-// }
-
-// fn identifier_or_function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     let (input, ident, is_function_call) = {
-//         let (inp, _) = multispace0(input)?;
-//         let (inp, ident) = identifier(inp)?;
-//         let (inp, _) = multispace0(inp)?;
-//         let (inp, is_function_call) = match char::<_, (&str, ErrorKind)>('(')(inp) {
-//             Ok((i, _)) => (i, true),
-//             Err(_) => (inp, false),
-//         };
-//         (inp, ident, is_function_call)
-//     };
-//     let (input, parameters) = if is_function_call {
-//         let (inp, _) = multispace0(input)?;
-//         let (inp, values) = comma_separated_values(inp)?;
-//         let (inp, _) = multispace0(inp)?;
-//         let (inp, _) = char(')')(inp)?;
-//         (inp, Some(values))
-//     } else {
-//         (input, None)
-//     };
-
-//     match parameters {
-//         Some(v) => Ok((input, Expr::FunctionCall(ident.to_string(), v))),
-//         None => Ok((input, Expr::Identifier(ident.to_string()))),
-//     }
-// }
-
-// /// parameters between parenthesis
-// fn parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-//     // dbg!("parameters", input);
-//     context("parameters", delimited(char('('), comma_separated_values, char(')')))(input)
-// }
-
-// /// empty parameters
-// fn empty_parameters<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-//     // dbg!("empty_parameters", input);
-//     context("empty_parameters", map(tuple((char('('), multispace0, char(')'))), |_| vec![]))(input)
-// }
-
-// fn function_call<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (&'a str, VecRcExpr), E> {
-//     // dbg!("function_call", input);
-//     context("function_call", pair(identifier, alt((parameters, empty_parameters))))(input)
-// }
-
-// /// array combinator
-// fn array<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, VecRcExpr, E> {
-//     // dbg!("array", input);
-//     context("array", delimited(char('['), comma_separated_values, char(']')))(input)
-// }
-
-// fn no_ope_value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     // dbg!("no_ope_value", input);
-//     let (input, _) = multispace0(input)?;
-//     let (input, open_parenthesis) = match char::<_, (&str, ErrorKind)>('(')(input) {
-//         Ok((i, _)) => (i, true),
-//         Err(_) => (input, false),
-//     };
-
-//     let (input, expr) = alt((simple, identifier_or_function_call, map(array, Expr::Array)))(input)?;
-
-//     let (input, _) = multispace0(input)?;
-//     if open_parenthesis {
-//         let (input, _) = char(')')(input)?;
-//         Ok((input, expr))
-//     } else {
-//         Ok((input, expr))
-//     }
-// }
-
-// fn main_parser<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     let (input, _) = multispace0(input)?;
-//     let (input, first_operand) = no_ope_value(input)?;
-//     let (input, _) = multispace0(input)?;
-//     let mut rest = input;
-//     let mut others = vec![];
-//     while rest.len() != 0 {
-//         let (input, op) = binary_operator(rest)?;
-//         let (input, _) = multispace0(input)?;
-//         let (input, other) = no_ope_value(input)?;
-//         let (input, _) = multispace0(input)?;
-//         others.push((op, other));
-//         rest = input;
-//     }
-//     let expr = others.into_iter().fold(first_operand, |acc, (op, val)| Expr::BinaryOperator(RcExpr::new(acc), RcExpr::new(val), op));
-//     Ok((rest, expr))
-// }
-
-// fn identifier_only<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-//     map(pair(identifier, not(preceded(sp, char('(')))), |(a, _b)| a)(input)
-// }
-
-// pub fn preceded2<I, O1, E: ParseError<I>, F, G>(inner: F) -> impl Fn(I) -> IResult<I, O1, E>
-// where
-//     F: Fn(I) -> IResult<I, O1, E>,
-//     I: Clone,
-// {
-//     alt((inner, delimited(multispace0, delimited(char('('), inner, char(')')), multispace0)))
-//     // move |input: I| {
-//     //     let (input, _) = first(input)?;
-//     //     second(input)
-//     // }
-// }
-
-// fn optional_parenthesis<I: Clone, O, E: ParseError<I>, F>(f: F) -> impl Fn(I) -> IResult<I, Option<O>, E>
-// where
-//     F: Fn(I) -> IResult<I, O, E>,
-// {
-//     preceded(first: F, second: G)
-//     move |input: I| alt((f, delimited(multispace0, delimited(char('('), f, char(')')), multispace0)))(input)
-//     // move |input: I| {
-//     //     let i = input.clone();
-//     //     match f(input) {
-//     //         Ok((i, o)) => Ok((i, Some(o))),
-//     //         Err(Err::Error(_)) => Ok((i, None)),
-//     //         Err(e) => Err(e),
-//     //     }
-//     // }
-// }
-
-// fn binary_operations<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     let (input, open_parenthesis) = match char::<_, (&str, ErrorKind)>('(')(input) {
-//         Ok((i, _)) => (i, true),
-//         Err(_) => (input, false),
-//     };
-//     let (input, _) = multispace0(input)?;
-//     let (input, first_operand) = value_no_ope(input)?;
-//     let (input, then) = many1(tuple((binary_operator, no_ope_value)))(input)?;
-//     let expr = then.into_iter().fold(first_operand, |acc, (op, val)| Expr::BinaryOperator(RcExpr::new(acc), RcExpr::new(val), op));
-//     let (input, _) = multispace0(input)?;
-
-//     if open_parenthesis {
-//         let (input, _) = char(')')(input)?;
-//         Ok((input, expr))
-//     } else {
-//         Ok((input, expr))
-//     }
-// }
-
-// fn value_no_ope_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     // dbg!("value_no_ope_no_parenthesis", input);
-//     delimited(
-//         multispace0,
-//         alt((
-//             map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap())),
-//             null,
-//             map(boolean, Expr::Boolean),
-//             map_opt(string, |s| unescape(s).map(Expr::Str)),
-//             map(function_call, |(f_name, params)| Expr::FunctionCall(String::from(f_name), params)),
-//             map(identifier, |s| Expr::Identifier(s.to_string())),
-//             map(array, Expr::Array),
-//         )),
-//         multispace0,
-//     )(input)
-// }
-
-// fn value_no_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     // dbg!("value_no_parenthesis", input);
-//     alt((delimited(multispace0, binary_operations, multispace0), value_no_ope))(input)
-// }
-
-// fn value_no_ope<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     // dbg!("non_binary_operation_value", input);
-//     alt((value_no_ope_no_parenthesis, delimited(multispace0, delimited(char('('), value_no_ope, char(')')), multispace0)))(input)
-// }
-
-// fn value<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
-//     // dbg!("value", input);
-//     alt((value_no_parenthesis, delimited(multispace0, delimited(char('('), value, char(')')), multispace0)))(input)
-// }
 
 pub fn expr<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
     parser(input)
