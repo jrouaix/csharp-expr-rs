@@ -60,28 +60,21 @@ fn identifier<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'
 }
 
 fn binary_operator<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, AssocOp, E> {
-    context(
-        "binary_operator",
-        delimited(
-            multispace0,
-            alt((
-                map(tag("+"), |_| AssocOp::Add),
-                map(tag("-"), |_| AssocOp::Subtract),
-                map(tag("*"), |_| AssocOp::Multiply),
-                map(tag("<="), |_| AssocOp::LessEqual),
-                map(tag("<"), |_| AssocOp::Less),
-                map(tag(">="), |_| AssocOp::GreaterEqual),
-                map(tag(">"), |_| AssocOp::Greater),
-                map(tag("/"), |_| AssocOp::Divide),
-                map(tag("=="), |_| AssocOp::Equal),
-                map(tag("!="), |_| AssocOp::NotEqual),
-                map(tag("%"), |_| AssocOp::Modulus),
-                map(tag("&&"), |_| AssocOp::LAnd),
-                map(tag("||"), |_| AssocOp::LOr),
-            )),
-            multispace0,
-        ),
-    )(input)
+    alt((
+        map(tag("+"), |_| AssocOp::Add),
+        map(tag("-"), |_| AssocOp::Subtract),
+        map(tag("*"), |_| AssocOp::Multiply),
+        map(tag("<="), |_| AssocOp::LessEqual),
+        map(tag("<"), |_| AssocOp::Less),
+        map(tag(">="), |_| AssocOp::GreaterEqual),
+        map(tag(">"), |_| AssocOp::Greater),
+        map(tag("/"), |_| AssocOp::Divide),
+        map(tag("=="), |_| AssocOp::Equal),
+        map(tag("!="), |_| AssocOp::NotEqual),
+        map(tag("%"), |_| AssocOp::Modulus),
+        map(tag("&&"), |_| AssocOp::LAnd),
+        map(tag("||"), |_| AssocOp::LOr),
+    ))(input)
 }
 
 fn open_parenthesis<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Lex, E> {
@@ -104,24 +97,33 @@ fn open_function<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
     Ok((input, name))
 }
 
-fn lexer<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Lex, E> {
+fn full_lexer<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Lex, E> {
     alt((
         open_parenthesis,
         close_parenthesis,
         comma,
+        map(binary_operator, |op| Lex::Op(op)),
+        map(string, |s| Lex::Expr(Expr::Str(s.into()))),
         map(null, |_| Lex::Expr(Expr::Null)),
         map(boolean, |b| Lex::Expr(Expr::Boolean(b))),
         map(double, |d| Lex::Expr(Expr::Num(FromPrimitive::from_f64(d).unwrap()))),
-        map(string, |s| Lex::Expr(Expr::Str(s.into()))),
-        map(binary_operator, |op| Lex::Op(op)),
         map(open_function, |id| Lex::FunctionOpen(id.into())),
         map(identifier, |id| Lex::Expr(Expr::Identifier(id.into()))),
     ))(input)
 }
 
+fn second_chance_lexer<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
+    map(double, |d| Expr::Num(FromPrimitive::from_f64(d).unwrap()))(input)
+}
+
 #[derive(Debug)]
 struct ParserMachine {
     parsers: Vec<Parser>,
+}
+
+enum OperatorParseTryResult {
+    Ok,
+    ShouldBeANumber,
 }
 
 impl ParserMachine {
@@ -206,15 +208,15 @@ impl ParserMachine {
         }
     }
 
-    fn operator(&mut self, op: AssocOp) {
+    fn operator(&mut self, op: AssocOp) -> OperatorParseTryResult {
         let current = self.current_parser();
         match &current.state {
-            ParsingState::Expr(e) => current.state = ParsingState::AwaitingNextOperand(e.clone(), op),
-            _ => {
-                dbg!(current);
-                todo!("Unable to add an operator here")
+            ParsingState::Expr(e) => {
+                current.state = ParsingState::AwaitingNextOperand(e.clone(), op);
+                OperatorParseTryResult::Ok
             }
-        };
+            _ => OperatorParseTryResult::ShouldBeANumber,
+        }
     }
 
     fn close_parenthesis(&mut self) {
@@ -234,17 +236,6 @@ impl ParserMachine {
 
         dbg!(self);
         todo!("Unable to close any parenthesis here")
-    }
-
-    fn lex(&mut self, lex: Lex) {
-        match lex {
-            Lex::ParenthesisOpen => self.open_parenthesis(),
-            Lex::ParenthesisClose => self.close_parenthesis(),
-            Lex::Expr(e) => self.expression(e),
-            Lex::Op(op) => self.operator(op),
-            Lex::Comma => self.comma(),
-            Lex::FunctionOpen(s) => self.open_function(s),
-        }
     }
 
     fn finalize(mut self) -> Expr {
@@ -284,8 +275,22 @@ fn parser<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, 
     let (input, _) = multispace0(input)?;
     let mut input = input;
     while input.len() != 0 {
-        let (i, lex) = lexer(input)?;
-        machine.lex(lex);
+        let (i, lex) = full_lexer(input)?;
+        let mut i = i;
+        match lex {
+            Lex::ParenthesisOpen => machine.open_parenthesis(),
+            Lex::ParenthesisClose => machine.close_parenthesis(),
+            Lex::Expr(e) => machine.expression(e),
+            Lex::Op(op) => {
+                if let OperatorParseTryResult::ShouldBeANumber = machine.operator(op) {
+                    let (i2, expr) = second_chance_lexer(input)?;
+                    machine.expression(expr);
+                    i = i2;
+                }
+            }
+            Lex::Comma => machine.comma(),
+            Lex::FunctionOpen(s) => machine.open_function(s),
+        }
         let (i, _) = multispace0(i)?;
         input = i;
     }
@@ -324,12 +329,50 @@ mod tests {
     }
 
     #[test_case("+", AssocOp::Add)]
-    #[test_case("- ", AssocOp::Subtract)]
-    #[test_case(" /", AssocOp::Divide)]
-    #[test_case(" && ", AssocOp::LAnd)]
+    #[test_case("-", AssocOp::Subtract)]
+    #[test_case("/", AssocOp::Divide)]
+    #[test_case("&&", AssocOp::LAnd)]
     fn binary_operator_test(text: &str, expected: AssocOp) {
         let result = binary_operator::<(&str, ErrorKind)>(text);
         assert_eq!(result, Ok(("", expected)));
+    }
+
+    #[test_case(stringify!("null") => "null")]
+    #[test_case(stringify!("test") => "test")]
+    #[test_case(stringify!("t") => "t")]
+    #[test_case("\"test escape\"" => "test escape")]
+    #[test_case("\"test\ttab\"" => "test\ttab")]
+    #[test_case(stringify!("test escape") => "test escape")]
+    // #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
+    #[test_case(stringify!("test\\slash") => "test\\slash")]
+    // #[test_case(stringify!("test\newline") => "test\newline")]
+    // #[test_case(stringify!("test\ttab") => "test\ttab")]
+    // #[test_case(stringify!("test\rreturn") => "test\rreturn")]
+    fn string_parser_test(text: &str) -> String {
+        let (i, result) = string::<(&str, ErrorKind)>(text).unwrap();
+        assert_eq!(i.len(), 0);
+        result.into()
+        // assert_eq!(result, Ok(("", expected)));
+    }
+
+    #[test_case("1+2")]
+    fn parser_machine_test(expression: &str) {
+        super_show(expression);
+    }
+
+    fn super_show(expression: &str) {
+        let (input, lexed) = get_lexed::<(&str, ErrorKind)>(expression).unwrap();
+        dbg!(&lexed);
+        // assert_eq!(input.len(), 0);
+
+        // let mut machine = ParserMachine::new();
+        // for lex in lexed {
+        //     dbg!(&lex);
+        //     machine.lex(lex);
+        //     dbg!(&machine);
+        // }
+
+        // machine.finalize();
     }
 
     fn get_lexed<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Vec<Lex>, E> {
@@ -337,7 +380,8 @@ mod tests {
         let (input, _) = multispace0(input)?;
         let mut input = input;
         while input.len() != 0 {
-            let (i, lex) = lexer(input)?;
+            let (i, lex) = full_lexer(input)?;
+            dbg!(&lex);
             lexed.push(lex);
             let (i, _) = multispace0(i)?;
             input = i;
@@ -345,86 +389,8 @@ mod tests {
         Ok((input, lexed))
     }
 
-    #[test]
-    fn lexer_test() {
-        // let expression = "(Funk(true, 0, Funk(true, 0, 42) + \"hello\"))";
-        let expression = "Funk(true, 0, Funk(true, 0, 42))";
-        let (input, lexed) = get_lexed::<(&str, ErrorKind)>(expression).unwrap();
-        assert_eq!(input.len(), 0);
-        // dbg!(&lexed);
-
-        let mut machine = ParserMachine::new();
-        for lex in lexed {
-            dbg!(&lex);
-            machine.lex(lex);
-            dbg!(&machine);
-        }
-
-        // machine.finalize();
-
-        // let (input, parsed) = parser::<(&str, ErrorKind)>(expression).unwrap();
-        // assert_eq!(input.len(), 0);
-        // dbg!(parsed);
-    }
-
-    #[test]
-    fn parser_machine_test() {
-        let mut machine = ParserMachine::new();
-        dbg!(&machine);
-        // machine.open_parenthesis();
-        // dbg!(&machine);
-        {
-            //////Funk(true, 0, 42)
-            machine.open_function("Funk".into());
-            dbg!(&machine);
-            machine.expression(Expr::Boolean(true));
-            dbg!(&machine);
-            machine.comma();
-            dbg!(&machine);
-            machine.expression(Expr::Num(dec!(0)));
-            dbg!(&machine);
-            machine.comma();
-            dbg!(&machine);
-            {
-                //////Funk(true, 0, 42)
-                machine.open_function("Funk".into());
-                dbg!(&machine);
-                machine.expression(Expr::Boolean(true));
-                dbg!(&machine);
-                machine.comma();
-                dbg!(&machine);
-                machine.expression(Expr::Num(dec!(0)));
-                dbg!(&machine);
-                machine.comma();
-                dbg!(&machine);
-                machine.expression(Expr::Num(dec!(42)));
-                dbg!(&machine);
-            }
-        }
-        // {
-        //     machine.open_parenthesis();
-        //     dbg!(&machine);
-        //     machine.expression(Expr::Num(dec!(2)));
-        //     dbg!(&machine);
-        //     machine.close_parenthesis();
-        //     dbg!(&machine);
-        // }
-        // machine.comma();
-        // dbg!(&machine);
-        // machine.expression(Expr::Identifier("test".into()));
-        // dbg!(&machine);
-        machine.close_parenthesis();
-        dbg!(&machine);
-        // machine.close_parenthesis();
-        // dbg!(&machine);
-        // dbg!(machine.finalize());
-        // machine.close_parenthesis();
-        // assert_eq!(machine.finalize(), Expr::Num(dec!(2)));
-        // dbg!(&machine);
-    }
-
     #[test_case("1+2", (Expr::Num(dec!(1)), Expr::Num(dec!(2)), AssocOp::Add))]
-    // #[test_case("(3)+(4)", (Expr::Num(dec!(3)), Expr::Num(dec!(4)), AssocOp::Add))]
+    #[test_case("(3)+(4)", (Expr::Num(dec!(3)), Expr::Num(dec!(4)), AssocOp::Add))]
     #[test_case(" 3- 2 ", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Subtract))]
     #[test_case(" 3 /2", (Expr::Num(dec!(3)), Expr::Num(dec!(2)), AssocOp::Divide))]
     #[test_case("3|| 5 ", (Expr::Num(dec!(3)), Expr::Num(dec!(5)), AssocOp::LOr))]
@@ -487,15 +453,15 @@ mod tests {
         assert_eq!(expr, Expr::Str("".to_string()))
     }
 
-    #[test]
-    fn parse_string_with_doublequote() -> Result<(), String> {
-        let expression = "\" \\\" \"";
-        let expected = " \" ";
-        let result = parse_expr(expression)?;
-        println!("'{}' => '{}'", expression, result.to_string());
-        assert_eq!(result, Expr::Str(expected.to_string()));
-        Ok(())
-    }
+    // #[test]
+    // fn parse_string_with_doublequote() -> Result<(), String> {
+    //     let expression = "\" \\\" \"";
+    //     let expected = " \" ";
+    //     let result = parse_expr(expression)?;
+    //     println!("'{}' => '{}'", expression, result.to_string());
+    //     assert_eq!(result, Expr::Str(expected.to_string()));
+    //     Ok(())
+    // }
 
     #[test]
     fn parse_simple() {
@@ -503,10 +469,10 @@ mod tests {
         assert_eq!(parser::<(&str, ErrorKind)>("2"), Ok(("", Expr::Num(dec!(2)))));
         assert_eq!(parser::<(&str, ErrorKind)>("(true)"), Ok(("", Expr::Boolean(true))));
         assert_eq!(parser::<(&str, ErrorKind)>("(-2)"), Ok(("", Expr::Num(dec!(-2)))));
-        assert_eq!(parser::<(&str, ErrorKind)>("true)"), Ok((")", Expr::Boolean(true))));
-        assert_eq!(parser::<(&str, ErrorKind)>("(true"), Err(nom::Err::Error(("", ErrorKind::Char))));
-        assert_eq!(parser::<(&str, ErrorKind)>("2 ,"), Ok((",", Expr::Num(dec!(2)))));
-        assert_eq!(parser::<(&str, ErrorKind)>("(2) ,"), Ok((" ,", Expr::Num(dec!(2)))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("true)"), Ok((")", Expr::Boolean(true))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("(true"), Err(nom::Err::Error(("", ErrorKind::Char))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("2 ,"), Ok((",", Expr::Num(dec!(2)))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("(2) ,"), Ok((" ,", Expr::Num(dec!(2)))));
     }
 
     #[test]
@@ -517,23 +483,23 @@ mod tests {
         assert_eq!(parser::<(&str, ErrorKind)>("( _id )"), Ok(("", Expr::Identifier("_id".into()))));
         assert_eq!(parser::<(&str, ErrorKind)>("( id ( ) )"), Ok(("", Expr::FunctionCall("id".into(), vec!()))));
         assert_eq!(parser::<(&str, ErrorKind)>("_id()"), Ok(("", Expr::FunctionCall("_id".into(), vec!()))));
-        assert_eq!(parser::<(&str, ErrorKind)>("_id()toto"), Ok(("toto", Expr::FunctionCall("_id".into(), vec!()))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("_id()toto"), Ok(("toto", Expr::FunctionCall("_id".into(), vec!()))));
         assert_eq!(parser::<(&str, ErrorKind)>("_id(1,2)"), Ok(("", Expr::FunctionCall("_id".into(), vec![rc_expr_num!(1), rc_expr_num!(2)]))));
-        assert_eq!(parser::<(&str, ErrorKind)>("_id( a , b"), Err(nom::Err::Error(("", ErrorKind::Char))));
-        assert_eq!(parser::<(&str, ErrorKind)>("id("), Err(nom::Err::Error(("", ErrorKind::Char))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("_id( a , b"), Err(nom::Err::Error(("", ErrorKind::Char))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("id("), Err(nom::Err::Error(("", ErrorKind::Char))));
     }
 
     #[test_case(stringify!("null") => "null")]
     #[test_case(stringify!("test") => "test")]
     #[test_case(stringify!("t") => "t")]
-    #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
-    #[test_case(stringify!("test\\slash") => "test\\slash")]
-    #[test_case(stringify!("test\newline") => "test\newline")]
-    #[test_case(stringify!("test\ttab") => "test\ttab")]
-    #[test_case(stringify!("test\rreturn") => "test\rreturn")]
-    #[test_case(stringify!("test escape") => "test escape")]
     #[test_case("\"test escape\"" => "test escape")]
     #[test_case("\"test\ttab\"" => "test\ttab")]
+    #[test_case(stringify!("test escape") => "test escape")]
+    // #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
+    #[test_case(stringify!("test\\slash") => "test\\slash")]
+    // #[test_case(stringify!("test\newline") => "test\newline")]
+    // #[test_case(stringify!("test\ttab") => "test\ttab")]
+    // #[test_case(stringify!("test\rreturn") => "test\rreturn")]
     fn parse_str(expression: &str) -> String {
         let result = parse_expr(expression);
         println!("{:?}", result);
@@ -546,9 +512,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_str_test() {
+        let result = parse_expr("test\\slash");
+        println!("{:?}", result);
+        let expr = result.unwrap();
+        dbg!(expr);
+        //     if let Expr::Str("test\\slash".into()) = expr {
+        //         result
+        //     } else {
+        //         panic!("{:?}", expr)
+        //     }
+    }
+
+    #[test]
     fn parse_complex_str() {
-        let result = parse_expr("\"te sΓé¼t\tt ab\"");
-        assert_eq!(result, Ok(Expr::Str("te sΓé¼t\tt ab".to_string())));
+        let result = parse_expr("\" te sΓé¼t\tt ab ./\"");
+        assert_eq!(result, Ok(Expr::Str(" te sΓé¼t\tt ab ./".to_string())));
     }
 
     #[test_case("1" => Expr::Num(dec!(1)))]
