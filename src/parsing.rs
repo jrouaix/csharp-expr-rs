@@ -1,22 +1,17 @@
 use crate::expressions::*;
-use nom::error::ErrorKind;
-use std::cell::RefCell;
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_a, is_not, tag, take_while, take_while1}, // escaped_transform
-    character::complete::{alphanumeric0, alphanumeric1, anychar, char, multispace0, one_of},
-    combinator::{cut, map, map_opt, not, opt, recognize},
+    bytes::complete::{escaped, tag, take_while1}, // escaped_transform
+    character::complete::{alphanumeric1, char, multispace0, one_of},
+    combinator::{cut, map, opt, recognize},
     error::{context, ParseError},
-    multi::many1,
-    multi::separated_list,
     number::complete::double,
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, preceded, tuple},
     IResult,
 };
 use rust_decimal::prelude::FromPrimitive;
-use std::rc::Rc;
-use unescape::unescape;
+use std::cell::RefCell;
 
 #[derive(Debug)]
 enum Lex {
@@ -307,8 +302,10 @@ mod tests {
     use super::*;
     use nom::error::ErrorKind;
     use rust_decimal_macros::*;
+    use std::rc::Rc;
     use std::time::Instant;
     use test_case::test_case;
+    // use unescape::unescape;
 
     macro_rules! rc_expr_str {
         ( $x:expr ) => {

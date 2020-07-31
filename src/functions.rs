@@ -127,62 +127,62 @@ fn exec_expr_to_date(
             // text.parse::<DateTime<Utc>>().map_err(|e| format!("{}", e))?.naive_utc()
             match text.parse::<DateTime<Utc>>() {
                 Ok(dt) => return Ok(dt.naive_utc()),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match DateTime::parse_from_rfc2822(&text) {
                 Ok(dt) => return Ok(dt.naive_utc()),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match text.parse::<NaiveDateTime>() {
                 Ok(dt) => return Ok(dt),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M:%S") {
                 Ok(dt) => return Ok(dt),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M:%S") {
                 Ok(dt) => return Ok(dt),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M:%S%.f") {
                 Ok(dt) => return Ok(dt),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M:%S%.f") {
                 Ok(dt) => return Ok(dt),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M") {
                 Ok(dt) => return Ok(dt),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match NaiveDateTime::parse_from_str(&text, "%Y/%m/%d %H:%M") {
                 Ok(dt) => return Ok(dt),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             match text.parse::<NaiveDate>() {
                 Ok(dt) => return Ok(dt.and_hms(0, 0, 0)),
-                Err(err) => {
-                    //dbg!(&text, err);
+                Err(_err) => {
+                    //dbg!(&text, _err);
                 }
             }
             Err(format!("The value '{}' is not a date.", text))?
