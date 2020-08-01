@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while1}, // escaped_transform
     character::complete::{alphanumeric1, char, multispace0, one_of},
-    combinator::{cut, map, opt, recognize},
+    combinator::{map, opt, recognize},
     error::{context, ParseError},
     number::complete::double,
     sequence::{delimited, preceded, tuple},
@@ -12,6 +12,7 @@ use nom::{
 };
 use rust_decimal::prelude::FromPrimitive;
 use std::cell::RefCell;
+use unescape::unescape;
 
 #[derive(Debug)]
 enum Lex {
@@ -29,22 +30,34 @@ enum Lex {
 
 // string parser from here : https://github.com/Geal/nom/issues/1075
 fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    context(
-        "string",
-        delimited(
-            char('\"'),
-            cut(map(
-                opt(escaped(
-                    take_while1(|c| c != '\\' && c != '"'),
-                    '\\',
-                    one_of("\"\\/bfnrtu"), // Note, this will not detect invalid unicode escapes.
-                )),
-                |o| o.unwrap_or_default(),
+    delimited(
+        char('\"'),
+        map(
+            opt(escaped(
+                take_while1(|c| c != '\\' && c != '"'),
+                '\\',
+                one_of("\\\""), // Note, this will not detect invalid unicode escapes.
             )),
-            char('\"'),
+            |o| o.unwrap_or_default(),
         ),
+        char('\"'),
     )(input)
 }
+
+// // string parser from here : https://github.com/Geal/nom/issues/1075
+// fn parse_str<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+//     // dbg!("parse_str", input);
+//     escaped(
+//         take_while1(|c| c != '\\' && c != '"'),
+//         '\\',
+//         one_of("\"\\/bfnrtu"), // Note, this will not detect invalid unicode escapes.
+//     )(input)
+// }
+
+// fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+//     // dbg!("string", input);
+//     context("string", delimited(char('\"'), cut(map(opt(parse_str), |o| o.unwrap_or_default())), char('\"')))(input)
+// }
 
 fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool, E> {
     context("boolean", alt((map(tag("false"), |_| false), map(tag("true"), |_| true))))(input)
@@ -103,7 +116,7 @@ fn full_lexer<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Le
         close_parenthesis,
         comma,
         map(binary_operator, |op| Lex::Op(op)),
-        map(string, |s| Lex::Expr(Expr::Str(s.into()))),
+        map(string, |s| Lex::Expr(Expr::Str(unescape(s).unwrap()))),
         map(null, |_| Lex::Expr(Expr::Null)),
         map(boolean, |b| Lex::Expr(Expr::Boolean(b))),
         map(double, |d| Lex::Expr(Expr::Num(FromPrimitive::from_f64(d).unwrap()))),
@@ -155,8 +168,10 @@ impl ParserMachine {
     fn open_function(&mut self, name: String) {
         let current = self.current_parser();
 
+        let next_state = ParsingState::Function(name.clone(), RefCell::new(vec![]), false);
         if let ParsingState::Started = &current.state {
-            current.state = ParsingState::Function(name.clone(), RefCell::new(vec![]), false);
+            current.state = next_state;
+            // self.push_parser(); //???????????????????????????????????????????? TESTS!!!
             return;
         }
 
@@ -165,7 +180,6 @@ impl ParserMachine {
             todo!("Unable to handle a function openning here")
         }
 
-        let next_state = ParsingState::Function(name.clone(), RefCell::new(vec![]), false);
         self.push_parser();
         let current = self.current_parser();
         current.state = next_state;
@@ -184,7 +198,7 @@ impl ParserMachine {
         }
     }
 
-    fn expression(&mut self, expr: Expr) {
+    fn expression(&mut self, expr: RcExpr) {
         let current = self.current_parser();
         match &current.state {
             ParsingState::Function(s, p, has_comma) => {
@@ -192,11 +206,11 @@ impl ParserMachine {
                 if !has_comma && parameters.len() != 0 {
                     todo!("There should be a comma to separate arguments")
                 }
-                p.borrow_mut().push(RcExpr::new(expr));
+                p.borrow_mut().push(expr);
                 current.state = ParsingState::Function(s.clone(), p.clone(), false);
             }
             ParsingState::AwaitingNextOperand(e, op) => {
-                current.state = ParsingState::Expr(Expr::BinaryOperator(RcExpr::new(e.clone()), RcExpr::new(expr), op.clone()));
+                current.state = ParsingState::Expr(RcExpr::new(Expr::BinaryOperator(e.clone(), expr, op.clone())));
             }
             ParsingState::Started => {
                 current.state = ParsingState::Expr(expr);
@@ -215,6 +229,18 @@ impl ParserMachine {
                 current.state = ParsingState::AwaitingNextOperand(e.clone(), op);
                 OperatorParseTryResult::Ok
             }
+            // ParsingState::Function(s, p, false) => {
+            //     let mut parameters = p.borrow_mut();
+            //     if parameters.len() != 0 {
+            //         let expr = parameters.pop().unwrap();
+            //         self.push_parser();
+            //         self.expression(expr);
+            //         self.operator(op);
+            //         OperatorParseTryResult::Ok
+            //     } else {
+            //         OperatorParseTryResult::ShouldBeANumber
+            //     }
+            // }
             _ => OperatorParseTryResult::ShouldBeANumber,
         }
     }
@@ -224,7 +250,7 @@ impl ParserMachine {
         if let ParsingState::Function(s, p, _) = current.state {
             // let's be permisive on writing some more comma like func(1,2,3,)
             let parameters = p.clone().into_inner();
-            self.expression(Expr::FunctionCall(s.clone(), parameters));
+            self.expression(RcExpr::new(Expr::FunctionCall(s.clone(), parameters)));
             return;
         }
 
@@ -246,7 +272,7 @@ impl ParserMachine {
         let result = self.parsers.pop().unwrap();
 
         match result.state {
-            ParsingState::Expr(e) => e,
+            ParsingState::Expr(e) => RcExpr::try_unwrap(e).unwrap(),
             _ => {
                 dbg!(&self);
                 todo!("Missing something");
@@ -264,8 +290,8 @@ struct Parser {
 enum ParsingState {
     Started,
     // Identifier(String),
-    Expr(Expr),
-    AwaitingNextOperand(Expr, AssocOp),
+    Expr(RcExpr),
+    AwaitingNextOperand(RcExpr, AssocOp),
     Function(String, RefCell<VecRcExpr>, bool),
 }
 
@@ -280,11 +306,11 @@ fn parser<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, 
         match lex {
             Lex::ParenthesisOpen => machine.open_parenthesis(),
             Lex::ParenthesisClose => machine.close_parenthesis(),
-            Lex::Expr(e) => machine.expression(e),
+            Lex::Expr(e) => machine.expression(RcExpr::new(e)),
             Lex::Op(op) => {
                 if let OperatorParseTryResult::ShouldBeANumber = machine.operator(op) {
                     let (i2, expr) = second_chance_lexer(input)?;
-                    machine.expression(expr);
+                    machine.expression(RcExpr::new(expr));
                     i = i2;
                 }
             }
@@ -310,7 +336,6 @@ mod tests {
     use std::rc::Rc;
     use std::time::Instant;
     use test_case::test_case;
-    // use unescape::unescape;
 
     macro_rules! rc_expr_str {
         ( $x:expr ) => {
@@ -320,11 +345,6 @@ mod tests {
     macro_rules! rc_expr_num {
         ( $x:expr ) => {
             Rc::new(Expr::Num(dec!($x)))
-        };
-    }
-    macro_rules! rc_expr_null {
-        () => {
-            Rc::new(Expr::Null)
         };
     }
 
@@ -341,18 +361,24 @@ mod tests {
     #[test_case(stringify!("test") => "test")]
     #[test_case(stringify!("t") => "t")]
     #[test_case("\"test escape\"" => "test escape")]
-    #[test_case("\"test\ttab\"" => "test\ttab")]
     #[test_case(stringify!("test escape") => "test escape")]
-    // #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
+    #[test_case(stringify!("test\"doublequote") => "test\"doublequote")]
     #[test_case(stringify!("test\\slash") => "test\\slash")]
-    // #[test_case(stringify!("test\newline") => "test\newline")]
-    // #[test_case(stringify!("test\ttab") => "test\ttab")]
-    // #[test_case(stringify!("test\rreturn") => "test\rreturn")]
-    fn string_parser_test(text: &str) -> String {
-        let (i, result) = string::<(&str, ErrorKind)>(text).unwrap();
-        assert_eq!(i.len(), 0);
-        result.into()
-        // assert_eq!(result, Ok(("", expected)));
+    #[test_case("\"test\nnewline\"" => "test\nnewline")]
+    #[test_case("\"test\ttab\"" => "test\ttab")]
+    #[test_case("\"test\rreturn\"" => "test\rreturn")]
+    fn string_parser_tests(text: &str) -> String {
+        let (i, result) = full_lexer::<(&str, ErrorKind)>(text).unwrap();
+        if i.len() != 0 {
+            dbg!(i, &result);
+            assert_eq!(i.len(), 0);
+        }
+        if let Lex::Expr(Expr::Str(s)) = result {
+            s.clone()
+        } else {
+            dbg!(&result);
+            panic!("Should be a Lex::Expr(Expr::Str())");
+        }
     }
 
     #[test_case("1+2")]
@@ -413,6 +439,8 @@ mod tests {
     #[test_case(" toto () ", Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]
     #[test_case(" toto (toto()) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]))]
     // #[test_case("toto((null - null)) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
+    #[test_case("(null - null) ", Expr::BinaryOperator(RcExpr::new(Expr::Null), RcExpr::new(Expr::Null), AssocOp::Subtract))]
+    #[test_case("2 - null ", Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(2))), RcExpr::new(Expr::Null), AssocOp::Subtract))]
     #[test_case("tata(null - null) ", Expr::FunctionCall("tata".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
     fn parse_some_expr(text: &str, expected: Expr) {
         let result = parse_expr(text).unwrap();
@@ -509,19 +537,6 @@ mod tests {
         } else {
             panic!("{:?}", expr)
         }
-    }
-
-    #[test]
-    fn parse_str_test() {
-        let result = parse_expr("test\\slash");
-        println!("{:?}", result);
-        let expr = result.unwrap();
-        dbg!(expr);
-        //     if let Expr::Str("test\\slash".into()) = expr {
-        //         result
-        //     } else {
-        //         panic!("{:?}", expr)
-        //     }
     }
 
     #[test]
