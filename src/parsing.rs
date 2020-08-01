@@ -150,7 +150,30 @@ impl ParserMachine {
         self.parsers.push(Parser { state: ParsingState::Started });
     }
 
-    fn current_parser<'a>(&'a mut self) -> &'a mut Parser {
+    fn current_parser_state<'a>(&'a mut self) -> &'a ParsingState {
+        let len = self.parsers.len();
+        &(if len == 0 {
+            self.push_parser();
+            self.parsers.get_mut(0).unwrap()
+        } else {
+            let last_position = len - 1;
+            self.parsers.get_mut(last_position).unwrap()
+        })
+        .state
+    }
+
+    fn current_parser_mut<'a>(&'a mut self) -> &'a mut Parser {
+        let len = self.parsers.len();
+        if len == 0 {
+            self.push_parser();
+            self.parsers.get_mut(0).unwrap()
+        } else {
+            let last_position = len - 1;
+            self.parsers.get_mut(last_position).unwrap()
+        }
+    }
+
+    fn current_parser_read<'a>(&'a mut self) -> &'a Parser {
         let len = self.parsers.len();
         if len == 0 {
             self.push_parser();
@@ -166,7 +189,7 @@ impl ParserMachine {
     }
 
     fn open_function(&mut self, name: String) {
-        let current = self.current_parser();
+        let current = self.current_parser_mut();
 
         let next_state = ParsingState::Function(name.clone(), RefCell::new(vec![]), false);
         if let ParsingState::Started = &current.state {
@@ -181,12 +204,12 @@ impl ParserMachine {
         }
 
         self.push_parser();
-        let current = self.current_parser();
+        let current = self.current_parser_mut();
         current.state = next_state;
     }
 
     fn comma(&mut self) {
-        let current = self.current_parser();
+        let current = self.current_parser_mut();
         match &current.state {
             ParsingState::Function(s, p, false) => {
                 current.state = ParsingState::Function(s.clone(), p.clone(), true);
@@ -199,7 +222,7 @@ impl ParserMachine {
     }
 
     fn expression(&mut self, expr: RcExpr) {
-        let current = self.current_parser();
+        let current = self.current_parser_mut();
         match &current.state {
             ParsingState::Function(s, p, has_comma) => {
                 let parameters = p.clone().into_inner();
@@ -211,6 +234,7 @@ impl ParserMachine {
             }
             ParsingState::AwaitingNextOperand(e, op) => {
                 current.state = ParsingState::Expr(RcExpr::new(Expr::BinaryOperator(e.clone(), expr, op.clone())));
+                // todo!("Resolve current parser to Expr")
             }
             ParsingState::Started => {
                 current.state = ParsingState::Expr(expr);
@@ -223,26 +247,28 @@ impl ParserMachine {
     }
 
     fn operator(&mut self, op: AssocOp) -> OperatorParseTryResult {
-        let current = self.current_parser();
-        match &current.state {
+        let current = self.current_parser_mut();
+        let expr_to_add = match &current.state {
             ParsingState::Expr(e) => {
                 current.state = ParsingState::AwaitingNextOperand(e.clone(), op);
-                OperatorParseTryResult::Ok
+                return OperatorParseTryResult::Ok;
             }
-            // ParsingState::Function(s, p, false) => {
-            //     let mut parameters = p.borrow_mut();
-            //     if parameters.len() != 0 {
-            //         let expr = parameters.pop().unwrap();
-            //         self.push_parser();
-            //         self.expression(expr);
-            //         self.operator(op);
-            //         OperatorParseTryResult::Ok
-            //     } else {
-            //         OperatorParseTryResult::ShouldBeANumber
-            //     }
-            // }
-            _ => OperatorParseTryResult::ShouldBeANumber,
-        }
+            ParsingState::Function(_, p, false) => {
+                let mut parameters = p.borrow_mut();
+                if parameters.len() == 0 {
+                    return OperatorParseTryResult::ShouldBeANumber;
+                } else {
+                    let expr = parameters.pop().unwrap();
+                    expr
+                }
+            }
+            _ => return OperatorParseTryResult::ShouldBeANumber,
+        };
+
+        self.push_parser();
+        self.expression(expr_to_add);
+        self.operator(op);
+        OperatorParseTryResult::Ok
     }
 
     fn close_parenthesis(&mut self) {
@@ -265,19 +291,18 @@ impl ParserMachine {
     }
 
     fn finalize(mut self) -> Expr {
-        if self.parsers.len() != 1 {
-            todo!("There should be only one expression deep");
+        if self.parsers.len() == 0 {
+            dbg!(&self);
+            todo!("There should be at least one expression deep");
         }
 
-        let result = self.parsers.pop().unwrap();
-
-        match result.state {
-            ParsingState::Expr(e) => RcExpr::try_unwrap(e).unwrap(),
-            _ => {
-                dbg!(&self);
-                todo!("Missing something");
-            }
+        while self.parsers.len() != 1 {
+            let parser = self.parsers.pop().unwrap();
+            let expr = parser.finalize();
+            self.expression(expr);
         }
+
+        RcExpr::try_unwrap(self.parsers.pop().unwrap().finalize()).unwrap()
     }
 }
 
@@ -293,6 +318,20 @@ enum ParsingState {
     Expr(RcExpr),
     AwaitingNextOperand(RcExpr, AssocOp),
     Function(String, RefCell<VecRcExpr>, bool),
+}
+
+impl Parser {
+    fn finalize(self) -> RcExpr {
+        match self.state {
+            ParsingState::Expr(e) => e,
+            ParsingState::Function(s, p, _) => {
+                // let's be permisive on writing some more comma like func(1,2,3,)
+                let parameters = p.clone().into_inner();
+                RcExpr::new(Expr::FunctionCall(s.clone(), parameters))
+            }
+            _ => todo!("Cannot finalize parser in this state"),
+        }
+    }
 }
 
 fn parser<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
@@ -438,7 +477,7 @@ mod tests {
     #[test_case("test()", Expr::FunctionCall("test".to_string(), VecRcExpr::new()))]
     #[test_case(" toto () ", Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]
     #[test_case(" toto (toto()) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]))]
-    // #[test_case("toto((null - null)) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
+    #[test_case("toto((null - null)) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
     #[test_case("(null - null) ", Expr::BinaryOperator(RcExpr::new(Expr::Null), RcExpr::new(Expr::Null), AssocOp::Subtract))]
     #[test_case("2 - null ", Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(2))), RcExpr::new(Expr::Null), AssocOp::Subtract))]
     #[test_case("tata(null - null) ", Expr::FunctionCall("tata".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
