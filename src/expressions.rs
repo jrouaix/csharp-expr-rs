@@ -295,10 +295,6 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
                 RcExpr::new(Expr::PreparedBinaryOperator(left_prepared.1, right_prepared.1, *op, Rc::clone(&operators))),
             )
         }
-        // Expr::Array(elements) => {
-        //     let (determinism, prepared_list) = prepare_expr_list(elements, funcs, identifiers, operators);
-        //     (determinism, Rc::new(Expr::Array(prepared_list)))
-        // }
         Expr::Str(_) => (FunctionDeterminism::Deterministic, expr),
         Expr::Boolean(_) => (FunctionDeterminism::Deterministic, expr),
         Expr::Num(_) => (FunctionDeterminism::Deterministic, expr),
@@ -314,12 +310,10 @@ pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<E
         Expr::Boolean(b) => Ok(ExprResult::Boolean(*b)),
         Expr::Num(f) => Ok(ExprResult::Num(*f)),
         Expr::Null => Ok(ExprResult::Null),
-        // Expr::Array(_) => Ok(ExprResult::NonExecuted(expr.clone())),
         Expr::Identifier(name) => match &values.get(&UniCase::new(name.into())) {
             Some(s) => Ok(ExprResult::Str(s())),
             None => Err(format!("Unable to find value for identifier named '{}'", name)),
         },
-        // Expr::BinaryOperator(_, _, _) => Ok(expr),
         Expr::FunctionCall(name, _parameters) => Err(format!("Unable to find the function named '{}'", name)),
         Expr::PreparedFunctionCall(_, parameters, fnc) => {
             let call_result = fnc(&parameters, &values)?;
@@ -359,7 +353,7 @@ mod tests {
     }
     macro_rules! exprresult_num {
         ( $x:expr ) => {
-            ExprResult::Num($x)
+            ExprResult::Num(dec!($x))
         };
     }
     macro_rules! rc_expr_null {
@@ -368,21 +362,20 @@ mod tests {
         };
     }
 
-    #[test_case(stringify!("test") => Vec::<String>::new())]
+    #[test_case("\"test\" + 2" => Vec::<String>::new())]
     #[test_case("test" => vec!["test"])]
-    #[test_case("[test2]" => vec!["test2"])]
-    #[test_case("[test2, test3, test2, test3]" => vec!["test2", "test3"])]
+    #[test_case("knownFunc(test2)" => vec!["test2"])]
+    #[test_case("knownFunc(test2, test3, test2, test3)" => vec!["test2", "test3"])]
     #[test_case("unknownFunc(test7)" => Vec::<String>::new())]
-    #[test_case("[test2, test3, test3, knownFunc(test4, test5), test6, test5]" => vec!["test2", "test3", "test4", "test5", "test6"])]
+    #[test_case("knownFunc(test2, test3, test3, knownFunc(test4, test5), test6, test5)" => vec!["test2", "test3", "test4", "test5", "test6"])]
     fn prepare_expr_and_identifiers_detection(expression: &str) -> Vec<String> {
         let expr = parse_expr(expression).unwrap();
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             UniCase::new("knownFunc".to_string()),
-            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42))))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42)))),
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs, Rc::new(null_op));
-        println!("{:?}", expr);
         let mut result = expr.identifiers_names.iter().cloned().collect::<Vec<String>>();
         result.sort();
         result
@@ -401,7 +394,7 @@ mod tests {
 
         funcs.insert(
             UniCase::new("forty_two".to_string()),
-            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(dec!(42))))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42)))),
         );
         funcs.insert(
             UniCase::new("forty_two_str".to_string()),
@@ -449,8 +442,8 @@ mod tests {
     #[test_case("IsNull(null)" => "true")]
     #[test_case("IsNull(2)" => "false")]
     #[test_case("IsNull(\" \t \")" => "true")]
-    #[test_case("isnull([])" => "false")]
-    #[test_case("isnull([test])" => "false")]
+    // #[test_case("isnull([])" => "false")]
+    // #[test_case("isnull([test])" => "false")]
     #[test_case("IsNull(IsBlank(null))" => "false")]
     #[test_case("AreEquals(IsBlank(null), IsNull(null))" => "true")]
     #[test_case("AreEquals(IsBlank(42), IsNull(null))" => "false")]

@@ -126,93 +126,65 @@ enum OperatorParseTryResult {
 
 impl ParserMachine {
     fn new() -> ParserMachine {
-        let mut machine = ParserMachine { parsers: vec![] };
-        machine.push_parser();
-        machine
+        // let mut machine = ParserMachine { parsers: vec![] };
+        // machine.push_parser(ParsingState::Started);
+        // machine
+        ParserMachine { parsers: vec![] }
     }
 
-    fn push_parser(&mut self) {
-        self.parsers.push(Parser { state: ParsingState::Started });
+    fn push_parser(&mut self, state: ParsingState) {
+        self.parsers.push(Parser { state: state });
+    }
+
+    fn ensure_one_parser(&mut self) {
+        if self.parsers.is_empty() {
+            self.push_parser(ParsingState::Started);
+        }
     }
 
     fn current_parser_state<'a>(&'a mut self) -> &'a ParsingState {
-        let len = self.parsers.len();
-        &(if len == 0 {
-            self.push_parser();
-            self.parsers.get_mut(0).unwrap()
-        } else {
-            let last_position = len - 1;
-            self.parsers.get_mut(last_position).unwrap()
-        })
-        .state
+        self.ensure_one_parser();
+        &(self.parsers.last_mut().unwrap().state)
     }
 
     fn current_parser_mut<'a>(&'a mut self) -> &'a mut Parser {
-        let len = self.parsers.len();
-        if len == 0 {
-            self.push_parser();
-            self.parsers.get_mut(0).unwrap()
-        } else {
-            let last_position = len - 1;
-            self.parsers.get_mut(last_position).unwrap()
-        }
+        self.ensure_one_parser();
+        self.parsers.last_mut().unwrap()
     }
 
     fn current_parser_read<'a>(&'a mut self) -> &'a Parser {
-        let len = self.parsers.len();
-        if len == 0 {
-            self.push_parser();
-            self.parsers.get_mut(0).unwrap()
-        } else {
-            let last_position = len - 1;
-            self.parsers.get_mut(last_position).unwrap()
-        }
+        self.ensure_one_parser();
+        self.parsers.last().unwrap()
     }
 
     fn open_parenthesis(&mut self) {
-        self.push_parser()
+        let current = self.current_parser_mut();
+        let new_state = ParsingState::JustParenthesis(None);
+        match &current.state {
+            ParsingState::Started => {
+                current.state = new_state;
+            }
+            _ => self.push_parser(new_state),
+        };
     }
 
     fn open_function(&mut self, name: String) {
-        let current = self.current_parser_mut();
-
         let next_state = ParsingState::Function(name.clone(), RefCell::new(vec![]), false);
-        if let ParsingState::Started = &current.state {
-            current.state = next_state;
-            // self.push_parser(); //???????????????????????????????????????????? TESTS!!!
-            return;
-        }
-
-        if let ParsingState::Expr(_) = &current.state {
-            dbg!(current);
-            todo!("Unable to handle a function openning here")
-        }
-
-        self.push_parser();
-        let current = self.current_parser_mut();
-        current.state = next_state;
+        self.push_parser(next_state);
     }
 
     fn comma(&mut self) {
         let current = self.current_parser_mut();
-        let should_try_reduce = match &current.state {
+        match &current.state {
             ParsingState::Function(s, p, false) => {
                 current.state = ParsingState::Function(s.clone(), p.clone(), true);
                 return;
             }
-            ParsingState::Expr(_) => true,
             _ => {
                 dbg!(current);
                 todo!("Unable to handle a comma ',' here");
             }
         };
-
-        if should_try_reduce {
-            let parser = self.parsers.pop().unwrap();
-            let expr = parser.finalize();
-            self.expression(expr);
-            self.comma();
-        }
     }
 
     fn expression(&mut self, expr: RcExpr) {
@@ -221,6 +193,7 @@ impl ParserMachine {
             ParsingState::Function(s, p, has_comma) => {
                 let parameters = p.clone().into_inner();
                 if !has_comma && parameters.len() != 0 {
+                    dbg!(&self);
                     todo!("There should be a comma to separate arguments")
                 }
                 p.borrow_mut().push(expr);
@@ -232,6 +205,9 @@ impl ParserMachine {
             ParsingState::Started => {
                 current.state = ParsingState::Expr(expr);
             }
+            ParsingState::JustParenthesis(None) => {
+                current.state = ParsingState::JustParenthesis(Some(expr));
+            }
             _ => {
                 dbg!(current);
                 todo!("Unable to handle an expression here")
@@ -241,61 +217,71 @@ impl ParserMachine {
 
     fn operator(&mut self, op: AssocOp) -> OperatorParseTryResult {
         let current = self.current_parser_mut();
-        let expr_to_add = match &current.state {
-            ParsingState::Expr(e) => {
-                current.state = ParsingState::AwaitingNextOperand(e.clone(), op);
-                return OperatorParseTryResult::Ok;
-            }
-            ParsingState::Function(_, p, false) => {
+        let (current_state_to_change, next_state_to_push, result) = match &current.state {
+            ParsingState::Expr(e) => (Some(ParsingState::AwaitingNextOperand(e.clone(), op)), None, OperatorParseTryResult::Ok),
+            ParsingState::Function(n, p, false) => {
                 let mut parameters = p.borrow_mut();
                 if parameters.len() == 0 {
-                    return OperatorParseTryResult::ShouldBeANumber;
+                    (None, None, OperatorParseTryResult::ShouldBeANumber)
                 } else {
                     let expr = parameters.pop().unwrap();
-                    expr
+                    drop(parameters);
+                    let expr = expr.clone();
+                    (
+                        Some(ParsingState::Function(n.clone(), p.clone(), true)),
+                        Some(ParsingState::AwaitingNextOperand(expr, op)),
+                        OperatorParseTryResult::Ok,
+                    )
                 }
             }
-            _ => return OperatorParseTryResult::ShouldBeANumber,
+            ParsingState::JustParenthesis(Some(expr)) => (Some(ParsingState::JustParenthesis(None)), Some(ParsingState::AwaitingNextOperand(expr.clone(), op)), OperatorParseTryResult::Ok),
+            _ => (None, None, OperatorParseTryResult::ShouldBeANumber),
         };
 
-        self.push_parser();
-        self.expression(expr_to_add);
-        self.operator(op);
-        OperatorParseTryResult::Ok
+        if let Some(s) = current_state_to_change {
+            current.state = s;
+        }
+        if let Some(s) = next_state_to_push {
+            self.push_parser(s);
+        }
+
+        result
     }
 
     fn close_parenthesis(&mut self) {
-        let current = self.parsers.pop().unwrap();
-        if let ParsingState::Function(s, p, _) = current.state {
-            // let's be permisive on writing some more comma like func(1,2,3,)
-            let parameters = p.clone().into_inner();
-            self.expression(RcExpr::new(Expr::FunctionCall(s.clone(), parameters)));
-            return;
+        let current = self.current_parser_mut();
+        match &current.state {
+            ParsingState::Function(s, p, false) => {
+                let parameters = p.clone().into_inner();
+                let expr = RcExpr::new(Expr::FunctionCall(s.clone(), parameters));
+                current.state = ParsingState::Expr(expr);
+            }
+            ParsingState::JustParenthesis(Some(expr)) => {
+                current.state = ParsingState::Expr(expr.clone());
+            }
+            _ => {
+                dbg!(current);
+                todo!("Unable to close any parenthesis here")
+            }
         }
-
-        // let current = self.parsers.pop().unwrap();
-        if let ParsingState::Expr(expr) = current.state {
-            self.expression(expr.clone());
-            return;
-        }
-
-        dbg!(self);
-        todo!("Unable to close any parenthesis here")
     }
 
     fn finalize(mut self) -> Expr {
-        if self.parsers.len() == 0 {
-            dbg!(&self);
-            todo!("There should be at least one expression deep");
-        }
+        self.reduce();
 
-        while self.parsers.len() != 1 {
-            let parser = self.parsers.pop().unwrap();
-            let expr = parser.finalize();
-            self.expression(expr);
+        if self.parsers.len() != 1 {
+            dbg!(&self);
+            todo!("There should be nothing else than one expression.");
         }
 
         RcExpr::try_unwrap(self.parsers.pop().unwrap().finalize()).unwrap()
+    }
+
+    fn reduce(&mut self) {
+        while (self.parsers.len() > 1) && self.parsers.last().unwrap().is_final() {
+            let expr = self.parsers.pop().unwrap().finalize();
+            self.expression(expr);
+        }
     }
 }
 
@@ -307,7 +293,7 @@ struct Parser {
 #[derive(Debug)]
 enum ParsingState {
     Started,
-    // Identifier(String),
+    JustParenthesis(Option<RcExpr>),
     Expr(RcExpr),
     AwaitingNextOperand(RcExpr, AssocOp),
     Function(String, RefCell<VecRcExpr>, bool),
@@ -323,12 +309,13 @@ impl Parser {
     fn try_finalize(self) -> Option<RcExpr> {
         match self.state {
             ParsingState::Expr(e) => Some(e),
-            ParsingState::Function(s, p, _) => {
-                // let's be permisive on writing some more comma like func(1,2,3,)
-                let parameters = p.clone().into_inner();
-                Some(RcExpr::new(Expr::FunctionCall(s.clone(), parameters)))
-            }
             _ => None,
+        }
+    }
+    fn is_final(&self) -> bool {
+        match self.state {
+            ParsingState::Expr(_) => true,
+            _ => false,
         }
     }
 }
@@ -356,6 +343,7 @@ fn parser<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, 
             Lex::Comma => machine.comma(),
             Lex::FunctionOpen(s) => machine.open_function(s),
         }
+        machine.reduce();
         let (i, _) = multispace0(i)?;
         input = i;
     }
@@ -379,6 +367,11 @@ mod tests {
     macro_rules! rc_expr_str {
         ( $x:expr ) => {
             Rc::new(Expr::Str($x.to_string()))
+        };
+    }
+    macro_rules! rc_expr_id {
+        ( $x:expr ) => {
+            Rc::new(Expr::Identifier($x.to_string()))
         };
     }
     macro_rules! rc_expr_num {
@@ -615,17 +608,18 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    // #[test_case("test(\"value\" , 2 , \"null\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value".to_string()), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
-    // #[test_case("hello" => Expr::Identifier("hello".to_string()))]
-    // #[test_case(" _hella " => Expr::Identifier("_hella".to_string()))]
-    // #[test_case(" helloworld " => Expr::Identifier("helloworld".to_string()))]
-    // #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value")]))]
-    // #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")]))]
-    // #[test_case("test(\"va lue\") - 3" => Expr::BinaryOperator(RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), rc_expr_num!(3), AssocOp::Subtract))]
-    // #[test_case("42 / test(\"va lue\")" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), AssocOp::Divide))]
-    // #[test_case("42 \r\n \t / func()" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new( Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
-    // #[test_case("(43 \r\n \t / ( func() ) )" => Expr::BinaryOperator(rc_expr_num!(43), RcExpr::new( Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
+    #[test_case("test(\"value\" , 2 , \"null\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value".to_string()), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
+    #[test_case("hello" => Expr::Identifier("hello".to_string()))]
+    #[test_case(" _hella " => Expr::Identifier("_hella".to_string()))]
+    #[test_case(" helloworld " => Expr::Identifier("helloworld".to_string()))]
+    #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value")]))]
+    #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")]))]
+    #[test_case("test(\"va lue\") - 3" => Expr::BinaryOperator(RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), rc_expr_num!(3), AssocOp::Subtract))]
+    #[test_case("42 / test(\"va lue\")" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new(Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), AssocOp::Divide))]
+    #[test_case("42 \r\n \t / func()" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new(Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
+    #[test_case("(43 \r\n \t / ( func() ) )" => Expr::BinaryOperator(rc_expr_num!(43), RcExpr::new(Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
     #[test_case("Func(2 + 1, 42)" => Expr::FunctionCall("Func".to_string(), vec![RcExpr::new(Expr::BinaryOperator(rc_expr_num!(2), rc_expr_num!(1), AssocOp::Add)), rc_expr_num!(42)]))]
+    #[test_case(" IIF (  ISLIKE(@var0, \"hello\" ), NUMBERVALUE( @var1 ) * NUMBERVALUE( 1.5), @var2 )" => Expr::FunctionCall("IIF".to_string(), vec![RcExpr::new(Expr::FunctionCall("ISLIKE".to_string(), vec![rc_expr_id!("var0"), rc_expr_str!("hello")])), RcExpr::new(Expr::BinaryOperator(RcExpr::new(Expr::FunctionCall("NUMBERVALUE".to_string(), vec![rc_expr_id!("var1")])), RcExpr::new(Expr::FunctionCall("NUMBERVALUE".to_string(), vec![rc_expr_num!(1.5)])), AssocOp::Multiply)), rc_expr_id!("var2") ]))]
     fn parse_complexe_expressions(expression: &'static str) -> Expr {
         let expr = expr::<(&str, ErrorKind)>(expression);
         match expr {
@@ -653,7 +647,7 @@ mod tests {
             for _ in 0..complexity {
                 expression.push_str(")");
             }
-            dbg!(complexity, &expression);
+            // dbg!(complexity, &expression);
             let now = Instant::now();
             let expr = expr::<(&str, ErrorKind)>(&expression);
             let (rest, _) = expr.unwrap();
@@ -672,11 +666,12 @@ mod tests {
                 }
                 expression.push_str("Funk(true, 0, \"42\")");
             }
+            // dbg!(complexity, &expression);
             let _now = Instant::now();
             let expr = expr::<(&str, ErrorKind)>(&expression);
             let (rest, _) = expr.unwrap();
             assert_eq!(rest.len(), 0);
-            // dbg!(complexity, &expression, _now.elapsed());
+            dbg!(_now.elapsed());
         }
     }
 }
