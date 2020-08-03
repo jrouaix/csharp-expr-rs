@@ -247,12 +247,17 @@ fn assert_between_params_count(params: &VecRcExpr, count_min: usize, count_max: 
 /*          Regex helpers         */
 /**********************************/
 
+// use cached::proc_macro::cached;
+// use cached::SizedCache;
+
+// #[cached(type = "SizedCache<String, Result<Regex, String>>", create = "{ SizedCache::with_size(1000) }", convert = r#"{ search_pattern.into() }"#)]
 fn make_case_insensitive_search_regex(search_pattern: &str) -> Result<Regex, String> {
     let search_pattern = regex::escape(&search_pattern);
     let regex = RegexBuilder::new(&search_pattern).case_insensitive(true).build().map_err(|e| format!("{}", e))?;
     Ok(regex)
 }
 
+// #[cached(type = "SizedCache<String, Result<Regex, String>>", create = "{ SizedCache::with_size(1000) }", convert = r#"{ search_pattern.into() }"#)]
 fn make_case_insensitive_equals_regex(search_pattern: &str) -> Result<Regex, String> {
     let search_pattern = regex::escape(&search_pattern);
     let search_pattern = format!("^{}$", search_pattern);
@@ -267,7 +272,7 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
     const ANY_MANY: &str = ".*";
     const ANY_ONE: &str = ".{1}";
 
-    let mut previous_char = Option::<char>::default();
+    let mut previous_char = None;
     for c in like_pattern.chars() {
         match (previous_char, c) {
             (None, '%') | (None, '_') => {
@@ -317,6 +322,7 @@ fn like_pattern_to_regex_pattern(like_pattern: &str) -> String {
     result
 }
 
+// #[cached(type = "SizedCache<String, Result<Regex, String>>", create = "{ SizedCache::with_size(1000) }", convert = r#"{ search_pattern.into() }"#)]
 fn make_case_insensitive_like_regex(search_pattern: &str) -> Result<Regex, String> {
     let search_pattern = regex::escape(&search_pattern);
     let regex_pattern = like_pattern_to_regex_pattern(&search_pattern);

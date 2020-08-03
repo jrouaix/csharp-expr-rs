@@ -442,8 +442,6 @@ mod tests {
     #[test_case("IsNull(null)" => "true")]
     #[test_case("IsNull(2)" => "false")]
     #[test_case("IsNull(\" \t \")" => "true")]
-    // #[test_case("isnull([])" => "false")]
-    // #[test_case("isnull([test])" => "false")]
     #[test_case("IsNull(IsBlank(null))" => "false")]
     #[test_case("AreEquals(IsBlank(null), IsNull(null))" => "true")]
     #[test_case("AreEquals(IsBlank(42), IsNull(null))" => "false")]
@@ -453,7 +451,8 @@ mod tests {
     #[test_case("In(\"ok\", 42, true, \"ok\")" => "true")]
     #[test_case("In(42, 42, true, \"ok\")" => "true")]
     #[test_case("Like(42, 42)" => "true" )]
-    // #[test_case("ISLIKE(\"https://www.matelas.com/195-sur-matelas.html#/2-dimensions-140x190\", \"#\")" => "true" )] // to debug
+    #[test_case("ISLIKE(\"hello#world\", \"#\")" => "false" )]
+    #[test_case("ISLIKE(\"hello#world\", \"%#%\")" => "true" )]
     #[test_case("Like(4242, \"4_42\")" => "true" )]
     #[test_case("Like(424, \"4_4%\")" => "true" )]
     #[test_case("Like(4242, \"%_42\")" => "true" )]
