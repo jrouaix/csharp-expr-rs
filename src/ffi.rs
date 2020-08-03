@@ -26,14 +26,13 @@ static UTF16: Lazy<&'static encoding_rs::Encoding> = Lazy::new(|| {
     encoding
 });
 
-fn string_from_csharp_string_ptr(s: FFICSharpString) -> String {
-    unsafe {
-        let slice = slice::from_raw_parts(s.ptr, s.len);
-        let mut decoder = UTF16.new_decoder();
-        let mut utf8 = String::with_capacity(s.len);
-        decoder.decode_to_string(slice, &mut utf8, true);
-        utf8
-    }
+fn string_from_csharp(s: *const c_char) -> String {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    };
+    let r_str = c_str.to_str().unwrap();
+    r_str.into()
 }
 
 #[repr(C)]
@@ -46,11 +45,7 @@ pub struct FFIParseResult {
 
 #[no_mangle]
 extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> FFIParseResult {
-    let c_str = unsafe {
-        assert!(!expression.is_null());
-        CStr::from_ptr(expression)
-    };
-    let r_str = c_str.to_str().unwrap();
+    let r_str = string_from_csharp(expression);
     let result = parse_expr(&r_str);
     match result {
         Err(err) => FFIParseResult {
@@ -99,14 +94,7 @@ extern "C" fn ffi_is_deterministic(ptr: *mut ExprAndIdentifiers) -> bool {
 #[derive(Debug)]
 pub struct IdentifierKeyValue {
     key: *const c_char,
-    value: FFICSharpString,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FFICSharpString {
-    ptr: *const u8,
-    len: usize,
+    value: *const c_char,
 }
 
 #[repr(C)]
@@ -131,7 +119,7 @@ extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *co
     let mut values = IdentifierValues::new();
     for ikv in vals.iter() {
         let k = string_from_c_char_ptr(ikv.key).unwrap();
-        let get_v = Box::new(move || string_from_csharp_string_ptr(ikv.value));
+        let get_v = Box::new(move || string_from_csharp(ikv.value));
         values.insert(UniCase::new(k), get_v);
     }
 

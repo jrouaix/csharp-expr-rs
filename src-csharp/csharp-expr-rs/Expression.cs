@@ -114,27 +114,18 @@ namespace csharp_expr_rs
         {
             try
             {
-                unsafe
+                var idValues = _emptyValues;
+
+                if (identifierValues != null)
                 {
-                    var idValues = _emptyValues;
-
-                    (string key, FFICSharpStringHolder holder)[] holders;
-
-                    if (identifierValues != null)
-                    {
-                        holders = identifierValues
-                            .Where(kv => _identifiers.Contains(kv.Key))
-                            .Select(kv => (kv.Key, kv.Value.MakeFFICSharpStringHolder()))
-                            .ToArray();
-                        idValues = holders
-                            .Select(h => new FFIIdentifierKeyValue { key = h.key, value = h.holder.ffiStr })
-                            .ToArray();
-                    }
-
-                    var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
-                    var stringResult = result.GetContent().AsStringAndDispose();
-                    return (result.is_error, stringResult);
+                    idValues = identifierValues
+                        .Select(kv => new FFIIdentifierKeyValue { key = kv.Key, value = kv.Value ?? string.Empty })
+                        .ToArray();
                 }
+
+                var result = Native.ffi_exec_expr(_expressionHandle, idValues, (UIntPtr)idValues.Length);
+                var stringResult = result.GetContent().AsStringAndDispose();
+                return (result.is_error, stringResult);
             }
             catch (Exception ex)
             {

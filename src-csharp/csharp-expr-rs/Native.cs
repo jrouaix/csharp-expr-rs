@@ -33,8 +33,10 @@ namespace csharp_expr_rs
     [StructLayout(LayoutKind.Sequential)]
     internal struct FFIIdentifierKeyValue
     {
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
         public string key;
-        public FFICSharpString value;
+        [MarshalAs(UnmanagedType.LPUTF8Str)]
+        public string value;
     }
 
     [StructLayout(LayoutKind.Sequential)]

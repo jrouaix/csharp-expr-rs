@@ -107,11 +107,11 @@ namespace csharp_expr_rs.Tests
                         result = expression.Execute(new Dictionary<string, string>() { { "test", "" } });
                         result.content.ShouldBe("");
 
+                        result = expression.Execute(new Dictionary<string, string>() { { "test", "1" } });
+                        result.content.ShouldBe("1");
+
                         result = expression.Execute(new Dictionary<string, string>() { { "test", "euro€" } });
                         result.content.ShouldBe("euro€");
-
-                        result = expression.Execute(new Dictionary<string, string>() { { "test", "1" } });
-                        result.content.ShouldBe("1"); // returns ""
                     }
                     finally
                     {
