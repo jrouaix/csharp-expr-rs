@@ -45,8 +45,12 @@ pub struct FFIParseResult {
 }
 
 #[no_mangle]
-extern "C" fn ffi_parse_and_prepare_expr(expression: FFICSharpString) -> FFIParseResult {
-    let r_str = string_from_csharp_string_ptr(expression);
+extern "C" fn ffi_parse_and_prepare_expr(expression: *const c_char) -> FFIParseResult {
+    let c_str = unsafe {
+        assert!(!expression.is_null());
+        CStr::from_ptr(expression)
+    };
+    let r_str = c_str.to_str().unwrap();
     let result = parse_expr(&r_str);
     match result {
         Err(err) => FFIParseResult {
@@ -163,14 +167,59 @@ extern "C" fn ffi_free_cstring(ptr: *mut c_char) {
     unsafe { CString::from_raw(ptr) };
 }
 
+// =========================================
+// =========================================
+//                  TESTING
+// =========================================
+// =========================================
+
 #[no_mangle]
-extern "C" fn ffi_test(param: FFICSharpString) -> *mut c_char {
-    assert!(!param.ptr.is_null());
+extern "C" fn PassLPStr(s: *const c_char) {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    };
 
-    let utf8 = string_from_csharp_string_ptr(param);
-    println!("utf-16 to utf-8 decoded: {}", utf8);
+    let r_str = c_str.to_str().unwrap();
+    dbg!("PassLPStr", r_str);
+}
+#[no_mangle]
+extern "C" fn PassLPWStr(s: *const c_char) {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    };
 
-    return CString::new("ok").unwrap().into_raw();
-    // let c_str_result = CString::new(s).unwrap();
-    // c_str_result.into_raw()
+    let r_str = c_str.to_str().unwrap();
+    dbg!("PassLPWStr", r_str);
+}
+#[no_mangle]
+extern "C" fn PassLPTStr(s: *const c_char) {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    };
+
+    let r_str = c_str.to_str().unwrap();
+    dbg!("PassLPTStr", r_str);
+}
+#[no_mangle]
+extern "C" fn PassLPUTF8Str(s: *const c_char) {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    };
+
+    let r_str = c_str.to_str().unwrap();
+    dbg!("PassLPUTF8Str", r_str);
+}
+#[no_mangle]
+extern "C" fn PassBStr(s: *const c_char) {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    };
+
+    let r_str = c_str.to_str().unwrap();
+    dbg!("PassBStr", r_str);
 }

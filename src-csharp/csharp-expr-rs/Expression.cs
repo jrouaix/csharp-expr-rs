@@ -53,17 +53,6 @@ namespace csharp_expr_rs
         }
     }
 
-    public class SomeTest
-    {
-        public void Test()
-        {
-            Native.ffi_test("test".MakeFFICSharpStringHolder().ffiStr).AsStringAndDispose();
-
-            //var pCh1 = test.GetPinnableReference();
-            //byte* pc = (byte*)&pCh1;
-        }
-    }
-
     /// <summary>
     /// If non sealed, implement the proper disposable pattern !
     /// </summary>
@@ -81,7 +70,7 @@ namespace csharp_expr_rs
         {
             try
             {
-                var FFIResultPointer = Native.ffi_parse_and_prepare_expr(expression.MakeFFICSharpStringHolder().ffiStr);
+                var FFIResultPointer = Native.ffi_parse_and_prepare_expr(expression);
                 if (FFIResultPointer.is_error)
                 {
                     var errorMsg = FFIResultPointer.GetError().AsStringAndDispose();

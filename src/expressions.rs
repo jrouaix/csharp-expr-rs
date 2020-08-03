@@ -510,6 +510,7 @@ mod tests {
     #[test_case("Right(\"Right\", -2)" => "")]
     #[test_case("Mid(\"Mid\", 1, 1)" => "M")]
     #[test_case("Mid(\"Mid\", 0, 2)" => "Mi")]
+    #[test_case("Mid(\"Rose et blanc,Rose et gris,Rose et creme,LibertyRo\", 1, (50 - 1 + 1))" => "Rose et blanc,Rose et gris,Rose et creme,LibertyRo")]
     #[test_case("Mid(\"Mid\", 3, 15)" => "d")]
     #[test_case("Mid(\"bcatag\", 2, 3)" => "cat")]
     #[test_case("Mid(\"bcatag\", 6, 3)" => "g")]
@@ -670,9 +671,15 @@ mod tests {
     }
 
     #[test]
-    fn non_ascii_test() {
-        let expr = "Substitute(\"ta mère !\", \"mère !\", \"frêre ?\")";
-        assert_eq!(parse_exec_expr_with_defaults(expr), "ta frêre ?");
+    fn non_ascii_tests() {
+        assert_eq!(parse_exec_expr_with_defaults("Substitute(\"ta mère !\", \"mère !\", \"frêre ?\")"), "ta frêre ?");
+        assert_eq!(parse_exec_expr_with_defaults("Len(\"crème\")"), "5");
+        assert_eq!(parse_exec_expr_with_defaults("Mid(\"crème\", 3, 1)"), "è");
+        assert_eq!(parse_exec_expr_with_defaults("Mid(\"crème\", 1, 3)"), "crè");
+        assert_eq!(parse_exec_expr_with_defaults("Mid(\"crème\", 3, 2)"), "èm");
+        assert_eq!(parse_exec_expr_with_defaults("Left(\"crème\", 3)"), "crè");
+        assert_eq!(parse_exec_expr_with_defaults("Right(\"crème\", 3)"), "ème");
+        assert_eq!(parse_exec_expr_with_defaults("Right(\"crème\", 2)"), "me");
     }
 
     fn parse_exec_expr_with_defaults<'a>(expression: &'a str) -> String {

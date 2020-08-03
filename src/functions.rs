@@ -614,48 +614,53 @@ fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 // Left
 fn f_left(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Left")?;
-    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let size = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as usize;
     if size == 0 {
-        Ok(ExprResult::Str("".to_string()))
-    } else if size >= s.len() {
+        return Ok(ExprResult::Str("".to_string()));
+    }
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let len = get_human_string_length(&s);
+    if size >= len {
         Ok(ExprResult::Str(s))
     } else {
-        Ok(ExprResult::Str(format!("{}", &s[..size])))
+        Ok(ExprResult::Str(format!("{}", s.chars().take(size).collect::<String>())))
     }
 }
 
 // Right
 fn f_right(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Right")?;
-    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let size = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as usize;
     if size == 0 {
-        Ok(ExprResult::Str("".to_string()))
-    } else if size >= s.len() {
+        return Ok(ExprResult::Str("".to_string()));
+    }
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let len = get_human_string_length(&s);
+    if size >= len {
         Ok(ExprResult::Str(s))
     } else {
-        Ok(ExprResult::Str(format!("{}", &s[s.len() - size..])))
+        Ok(ExprResult::Str(format!("{}", s.chars().skip(len - size).collect::<String>())))
     }
 }
 
 // Mid
 fn f_mid(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 3, "Mid")?;
+    let size = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
+    if size == 0 {
+        return Ok(ExprResult::Str("".to_string()));
+    }
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let false_position = exec_expr_to_int(params.get(1).unwrap(), values)?.max(1);
     let position = (false_position - 1) as usize;
-    if position >= s.len() {
+    let len = get_human_string_length(&s);
+    if position >= len {
         return Ok(ExprResult::Str("".to_string()));
     }
-    let size = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
-    if size == 0 {
-        Ok(ExprResult::Str("".to_string()))
-    } else if position == 0 && size >= s.len() {
+    if position == 0 && size >= len {
         Ok(ExprResult::Str(s))
     } else {
-        let end = (position + size).min(s.len());
-        Ok(ExprResult::Str(format!("{}", &s[position..end])))
+        Ok(ExprResult::Str(format!("{}", s.chars().skip(position).take(size).collect::<String>())))
     }
 }
 
@@ -665,9 +670,13 @@ fn single_string_func<F: FnOnce(String) -> ExprFuncResult>(params: &VecRcExpr, v
     func(s)
 }
 
+fn get_human_string_length(s: &str) -> usize {
+    s.chars().count()
+}
+
 // Len
 fn f_len(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_string_func(params, values, "Len", |s| Ok(ExprResult::Num(ExprDecimal::from(s.len()))))
+    single_string_func(params, values, "Len", |s| Ok(ExprResult::Num(ExprDecimal::from(get_human_string_length(&s)))))
 }
 
 // Lower

@@ -543,6 +543,7 @@ mod tests {
 
     #[test_case(stringify!("null") => "null")]
     #[test_case(stringify!("test") => "test")]
+    #[test_case(stringify!("€") => "€")]
     #[test_case(stringify!("t") => "t")]
     #[test_case("\"test escape\"" => "test escape")]
     #[test_case("\"test\ttab\"" => "test\ttab")]
@@ -610,6 +611,7 @@ mod tests {
 
     #[test_case("test(\"value\" , 2 , \"null\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value".to_string()), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
     #[test_case("hello" => Expr::Identifier("hello".to_string()))]
+    #[test_case("\"€\"" => Expr::Str("€".to_string()))]
     #[test_case(" _hella " => Expr::Identifier("_hella".to_string()))]
     #[test_case(" helloworld " => Expr::Identifier("helloworld".to_string()))]
     #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value")]))]

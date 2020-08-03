@@ -17,6 +17,32 @@ namespace csharp_expr_rs.Tests
             _output = output;
         }
 
+        [Theory]
+        [InlineData("\"euro€\"", "euro€")]
+        [InlineData("\"€euro\"", "€euro")]
+        [InlineData("\"€\"", "€")]
+        public void Exec(string expression, string expectedResult)
+        {
+            using (var sw = new StringWriter())
+            {
+                Console.SetOut(sw);
+                try
+                {
+                    using (var expr = new Expression(expression))
+                    {
+                        var result = expr.Execute(new Dictionary<string, string>());
+                        _output.WriteLine(result.content);
+                        result.content.ShouldBe(expectedResult);
+                    }
+                }
+                finally
+                {
+                    _output.WriteLine(sw.ToString());
+                }
+            }
+        }
+
+
         [Fact]
         public void Exec_function()
         {
@@ -54,7 +80,6 @@ namespace csharp_expr_rs.Tests
         public void HandleParseError()
         {
             Should.NotThrow(() => new Expression("func()"));
-
             Should.Throw<ExpressionParsingException>(() => new Expression("func() .. / \" wtf"));
         }
 
@@ -81,6 +106,9 @@ namespace csharp_expr_rs.Tests
 
                         result = expression.Execute(new Dictionary<string, string>() { { "test", "" } });
                         result.content.ShouldBe("");
+
+                        result = expression.Execute(new Dictionary<string, string>() { { "test", "euro€" } });
+                        result.content.ShouldBe("euro€");
 
                         result = expression.Execute(new Dictionary<string, string>() { { "test", "1" } });
                         result.content.ShouldBe("1"); // returns ""

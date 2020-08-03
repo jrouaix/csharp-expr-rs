@@ -11,8 +11,10 @@ namespace csharp_expr_rs
     {
         public const string LIB_NAME = "csharp_expr.dll";
 
-        [DllImport(LIB_NAME, CharSet = CharSet.Ansi)]
-        public static extern FFIParseResult ffi_parse_and_prepare_expr(FFICSharpString expression);
+        // https://docs.microsoft.com/fr-fr/dotnet/framework/interop/default-marshaling-for-strings
+
+        [DllImport(LIB_NAME)]
+        public static extern FFIParseResult ffi_parse_and_prepare_expr([MarshalAs(UnmanagedType.LPUTF8Str)] string expression);
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_expr(IntPtr ptr);
 
@@ -26,9 +28,6 @@ namespace csharp_expr_rs
         public static extern FFIExecResult ffi_exec_expr(FFIExpressionHandle ptr, FFIIdentifierKeyValue[] identifier_values, UIntPtr identifier_values_len);
         [DllImport(LIB_NAME)]
         public static extern void ffi_free_cstring(IntPtr ptr);
-
-        [DllImport(LIB_NAME)]
-        public static unsafe extern FFIStringHandle ffi_test(FFICSharpString sharpString);
     }
 
     [StructLayout(LayoutKind.Sequential)]
