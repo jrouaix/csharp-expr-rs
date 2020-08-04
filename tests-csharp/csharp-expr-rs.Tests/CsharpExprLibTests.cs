@@ -125,28 +125,28 @@ namespace csharp_expr_rs.Tests
         [Fact]
         public void Fast_try_thousands()
         {
-            using (var sw = new StringWriter())
-            {
-                Console.SetOut(sw);
+            //using (var sw = new StringWriter())
+            //{
+            //Console.SetOut(sw);
 
-                var s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                var expression = new Expression("test");
-                for (int i = 0; i < 10000; i++)
-                {
-                    var value = $"{s}{i}";
-                    var identifierValues = new Dictionary<string, string>() { { "test", value } };
-                    try
-                    {
-                        var result = expression.Execute(identifierValues);
-                        result.content.ShouldBe(s);
-                    }
-                    finally
-                    {
-                        expression.Dispose();
-                        _output.WriteLine(sw.ToString());
-                    }
-                }
+            var s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            using var expression = new Expression("test");
+            //try
+            //{
+            for (int i = 0; i < 1000000; i++)
+            {
+                var value = $"{s}{i}";
+                var identifierValues = new Dictionary<string, string>() { { "test", value } };
+
+                var (is_error, content) = expression.Execute(identifierValues);
+                content.ShouldBe(value);
             }
+            //}
+            //finally
+            //{
+            //    _output.WriteLine(sw.ToString());
+            //}
+            //}
         }
     }
 }

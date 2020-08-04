@@ -49,7 +49,7 @@ c# expression parser in Rust
 - [x] Handle non usefull parenthesis (some tests to uncomment)
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [x] Rc strings to avoid cloning them
-- [ ] Rc strings and avoid read them multiple times when variable value used multiple times
+- [x] Rc and lazy load variable values and avoid read them multiple times when used multiple times
 - [ ] comment out or remove dbg!()
 - [ ] Handle operators precedence !
 - [ ] Debug snake case identifiers parsing

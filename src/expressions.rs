@@ -343,8 +343,8 @@ mod tests {
     use super::*;
     use crate::functions::*;
     use rust_decimal_macros::*;
+    use std::time::Instant;
     use test_case::test_case;
-
     macro_rules! rc_expr_str {
         ( $x:expr ) => {
             Rc::new(Expr::Str($x.to_string()))
@@ -753,5 +753,29 @@ mod tests {
     fn null_op(l: RcExpr, r: RcExpr, op: AssocOp, _: &IdentifierValues) -> ExprFuncResult {
         dbg!(l, op, r, "RETURNS Null (null_op)");
         Ok(ExprResult::Null)
+    }
+
+    // PLEASE TEST WITH:
+    //  cargo test --release -- --nocapture fast_try_thousands
+    // PERFORMANCES ARE ABOUT 7 times better than :
+    //  cargo test -- --nocapture fast_try_thousands
+    #[test]
+    #[ignore] // remove that to execute
+    fn fast_try_thousands() {
+        let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let expr = parse_expr("test").unwrap();
+        let expr = prepare_expr_and_identifiers(expr, &get_functions(), Rc::new(f_operators));
+        let now = Instant::now();
+
+        for i in 0..1000000 {
+            let mut values = IdentifierValues::new();
+            let test_value = format!("{}{}", s, i);
+            // let test_value2 = test_value.clone();
+            values.insert("test".into(), Box::new(move || Rc::new(format!("{}{}", s, i))));
+            let result = exec_expr(&expr.expr, &values).unwrap();
+            assert_eq!(result.to_string(), test_value);
+        }
+
+        dbg!(now.elapsed());
     }
 }
