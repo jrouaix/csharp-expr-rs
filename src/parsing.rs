@@ -13,6 +13,7 @@ use nom::{
 use rust_decimal::prelude::FromPrimitive;
 use std::cell::RefCell;
 use unescape::unescape;
+use unicase::UniCase;
 
 #[derive(Debug)]
 enum Lex {
@@ -169,7 +170,7 @@ impl ParserMachine {
     }
 
     fn open_function(&mut self, name: String) {
-        let next_state = ParsingState::Function(name.clone(), RefCell::new(vec![]), false);
+        let next_state = ParsingState::Function(UniCase::new(name.clone()), RefCell::new(vec![]), false);
         self.push_parser(next_state);
     }
 
@@ -296,7 +297,7 @@ enum ParsingState {
     JustParenthesis(Option<RcExpr>),
     Expr(RcExpr),
     AwaitingNextOperand(RcExpr, AssocOp),
-    Function(String, RefCell<VecRcExpr>, bool),
+    Function(UniCase<String>, RefCell<VecRcExpr>, bool),
 }
 
 impl Parser {
@@ -364,9 +365,14 @@ mod tests {
     use std::time::Instant;
     use test_case::test_case;
 
+    macro_rules! unicase {
+        ( $x:expr ) => {
+            UniCase::new($x.to_string())
+        };
+    }
     macro_rules! rc_expr_str {
         ( $x:expr ) => {
-            Rc::new(Expr::Str($x.to_string()))
+            Rc::new(Expr::Str($x.into()))
         };
     }
     macro_rules! rc_expr_id {
@@ -468,14 +474,14 @@ mod tests {
         assert_eq!(result, Ok(("", Expr::BinaryOperator(RcExpr::new(left), RcExpr::new(right), op))));
     }
 
-    #[test_case("test()", Expr::FunctionCall("test".to_string(), VecRcExpr::new()))]
-    #[test_case(" toto () ", Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]
-    #[test_case(" toto (toto()) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::FunctionCall("toto".to_string(), VecRcExpr::new()))]))]
-    #[test_case("toto((null - null)) ", Expr::FunctionCall("toto".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
+    #[test_case("test()", Expr::FunctionCall(unicase!("test"), VecRcExpr::new()))]
+    #[test_case(" toto () ", Expr::FunctionCall(unicase!("toto"), VecRcExpr::new()))]
+    #[test_case(" toto (toto()) ", Expr::FunctionCall(unicase!("toto"), vec![RcExpr::new(Expr::FunctionCall(unicase!("toto"), VecRcExpr::new()))]))]
+    #[test_case("toto((null - null)) ", Expr::FunctionCall(unicase!("toto"), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
     #[test_case("(null - null) ", Expr::BinaryOperator(RcExpr::new(Expr::Null), RcExpr::new(Expr::Null), AssocOp::Subtract))]
     #[test_case("2 - null ", Expr::BinaryOperator(RcExpr::new(Expr::Num(dec!(2))), RcExpr::new(Expr::Null), AssocOp::Subtract))]
-    #[test_case("tata(null - null) ", Expr::FunctionCall("tata".to_string(), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
-    #[test_case("Find(\"\\t\", \"bo\\tbo\")", Expr::FunctionCall("Find".to_string(), vec![rc_expr_str!("\t"), rc_expr_str!("bo\tbo")]))]
+    #[test_case("tata(null - null) ", Expr::FunctionCall(unicase!("tata"), vec![RcExpr::new(Expr::BinaryOperator( RcExpr::new(Expr::Null),RcExpr::new(Expr::Null), AssocOp::Subtract))]))]
+    #[test_case("Find(\"\\t\", \"bo\\tbo\")", Expr::FunctionCall(unicase!("Find"), vec![rc_expr_str!("\t"), rc_expr_str!("bo\tbo")]))]
     fn parse_some_expr(text: &str, expected: Expr) {
         let result = parse_expr(text).unwrap();
         assert_eq!(result, expected);
@@ -533,10 +539,10 @@ mod tests {
         assert_eq!(parser::<(&str, ErrorKind)>("(true)"), Ok(("", Expr::Boolean(true))));
         assert_eq!(parser::<(&str, ErrorKind)>("( true )"), Ok(("", Expr::Boolean(true))));
         assert_eq!(parser::<(&str, ErrorKind)>("( _id )"), Ok(("", Expr::Identifier("_id".into()))));
-        assert_eq!(parser::<(&str, ErrorKind)>("( id ( ) )"), Ok(("", Expr::FunctionCall("id".into(), vec!()))));
-        assert_eq!(parser::<(&str, ErrorKind)>("_id()"), Ok(("", Expr::FunctionCall("_id".into(), vec!()))));
-        // assert_eq!(parser::<(&str, ErrorKind)>("_id()toto"), Ok(("toto", Expr::FunctionCall("_id".into(), vec!()))));
-        assert_eq!(parser::<(&str, ErrorKind)>("_id(1,2)"), Ok(("", Expr::FunctionCall("_id".into(), vec![rc_expr_num!(1), rc_expr_num!(2)]))));
+        assert_eq!(parser::<(&str, ErrorKind)>("( id ( ) )"), Ok(("", Expr::FunctionCall(unicase!("id"), vec!()))));
+        assert_eq!(parser::<(&str, ErrorKind)>("_id()"), Ok(("", Expr::FunctionCall(unicase!("_id"), vec!()))));
+        // assert_eq!(parser::<(&str, ErrorKind)>("_id()toto"), Ok(("toto", Expr::FunctionCall(unicase!("_id"), vec!()))));
+        assert_eq!(parser::<(&str, ErrorKind)>("_id(1,2)"), Ok(("", Expr::FunctionCall(unicase!("_id"), vec![rc_expr_num!(1), rc_expr_num!(2)]))));
         // assert_eq!(parser::<(&str, ErrorKind)>("_id( a , b"), Err(nom::Err::Error(("", ErrorKind::Char))));
         // assert_eq!(parser::<(&str, ErrorKind)>("id("), Err(nom::Err::Error(("", ErrorKind::Char))));
     }
@@ -597,31 +603,31 @@ mod tests {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test(1,2)" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(2)]))]
-    #[test_case("(test( ( 3 ), (4)))" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(3), rc_expr_num!(4)]))]
-    #[test_case("test ( 1 , 42 )" => Expr::FunctionCall("test".to_string(), vec![rc_expr_num!(1), rc_expr_num!(42)]))]
-    #[test_case("test()" => Expr::FunctionCall("test".to_string(), vec!()))]
-    #[test_case("test((test()))" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::FunctionCall("test".to_string(), vec![]))]))] // to debug
-    #[test_case("test(aa)" => Expr::FunctionCall("test".to_string(), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
-    #[test_case("Test(42)" => Expr::FunctionCall("Test".to_string(), vec![rc_expr_num!(42)]))]
-    #[test_case("Test(1 / 2)" => Expr::FunctionCall("Test".to_string(), vec![RcExpr::new(Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(2), AssocOp::Divide))]))]
+    #[test_case("test(1,2)" => Expr::FunctionCall(unicase!("test"), vec![rc_expr_num!(1), rc_expr_num!(2)]))]
+    #[test_case("(test( ( 3 ), (4)))" => Expr::FunctionCall(unicase!("test"), vec![rc_expr_num!(3), rc_expr_num!(4)]))]
+    #[test_case("test ( 1 , 42 )" => Expr::FunctionCall(unicase!("test"), vec![rc_expr_num!(1), rc_expr_num!(42)]))]
+    #[test_case("test()" => Expr::FunctionCall(unicase!("test"), vec!()))]
+    #[test_case("test((test()))" => Expr::FunctionCall(unicase!("test"), vec![Rc::new(Expr::FunctionCall(unicase!("test"), vec![]))]))]
+    #[test_case("test(aa)" => Expr::FunctionCall(unicase!("test"), vec![Rc::new(Expr::Identifier("aa".to_string()))]))]
+    #[test_case("Test(42)" => Expr::FunctionCall(unicase!("Test"), vec![rc_expr_num!(42)]))]
+    #[test_case("Test(1 / 2)" => Expr::FunctionCall(unicase!("Test"), vec![RcExpr::new(Expr::BinaryOperator(rc_expr_num!(1), rc_expr_num!(2), AssocOp::Divide))]))]
     fn parse_function_call(expression: &str) -> Expr {
         parse_expr(expression).unwrap()
     }
 
-    #[test_case("test(\"value\" , 2 , \"null\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value".to_string()), rc_expr_num!(2), rc_expr_str!("null".to_string())]))]
-    #[test_case("hello" => Expr::Identifier("hello".to_string()))]
-    #[test_case("\"€\"" => Expr::Str("€".to_string()))]
-    #[test_case(" _hella " => Expr::Identifier("_hella".to_string()))]
-    #[test_case(" helloworld " => Expr::Identifier("helloworld".to_string()))]
-    #[test_case("test(\"value\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("value")]))]
-    #[test_case("test(\"va lue\")" => Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")]))]
-    #[test_case("test(\"va lue\") - 3" => Expr::BinaryOperator(RcExpr::new( Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), rc_expr_num!(3), AssocOp::Subtract))]
-    #[test_case("42 / test(\"va lue\")" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new(Expr::FunctionCall("test".to_string(), vec![rc_expr_str!("va lue")])), AssocOp::Divide))]
-    #[test_case("42 \r\n \t / func()" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new(Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
-    #[test_case("(43 \r\n \t / ( func() ) )" => Expr::BinaryOperator(rc_expr_num!(43), RcExpr::new(Expr::FunctionCall("func".to_string(), vec![])), AssocOp::Divide))]
-    #[test_case("Func(2 + 1, 42)" => Expr::FunctionCall("Func".to_string(), vec![RcExpr::new(Expr::BinaryOperator(rc_expr_num!(2), rc_expr_num!(1), AssocOp::Add)), rc_expr_num!(42)]))]
-    #[test_case(" IIF (  ISLIKE(@var0, \"hello\" ), NUMBERVALUE( @var1 ) * NUMBERVALUE( 1.5), @var2 )" => Expr::FunctionCall("IIF".to_string(), vec![RcExpr::new(Expr::FunctionCall("ISLIKE".to_string(), vec![rc_expr_id!("var0"), rc_expr_str!("hello")])), RcExpr::new(Expr::BinaryOperator(RcExpr::new(Expr::FunctionCall("NUMBERVALUE".to_string(), vec![rc_expr_id!("var1")])), RcExpr::new(Expr::FunctionCall("NUMBERVALUE".to_string(), vec![rc_expr_num!(1.5)])), AssocOp::Multiply)), rc_expr_id!("var2") ]))]
+    #[test_case("test(\"value\" , 2 , \"null\")" => Expr::FunctionCall(unicase!("test"), vec![rc_expr_str!("value"), rc_expr_num!(2), rc_expr_str!("null")]))]
+    #[test_case("hello" => Expr::Identifier("hello".into()))]
+    #[test_case("\"€\"" => Expr::Str("€".into()))]
+    #[test_case(" _hella " => Expr::Identifier("_hella".into()))]
+    #[test_case(" helloworld " => Expr::Identifier("helloworld".into()))]
+    #[test_case("test(\"value\")" => Expr::FunctionCall(unicase!("test"), vec![rc_expr_str!("value")]))]
+    #[test_case("test(\"va lue\")" => Expr::FunctionCall(unicase!("test"), vec![rc_expr_str!("va lue")]))]
+    #[test_case("test(\"va lue\") - 3" => Expr::BinaryOperator(RcExpr::new( Expr::FunctionCall(unicase!("test"), vec![rc_expr_str!("va lue")])), rc_expr_num!(3), AssocOp::Subtract))]
+    #[test_case("42 / test(\"va lue\")" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new(Expr::FunctionCall(unicase!("test"), vec![rc_expr_str!("va lue")])), AssocOp::Divide))]
+    #[test_case("42 \r\n \t / func()" => Expr::BinaryOperator(rc_expr_num!(42), RcExpr::new(Expr::FunctionCall(unicase!("func"), vec![])), AssocOp::Divide))]
+    #[test_case("(43 \r\n \t / ( func() ) )" => Expr::BinaryOperator(rc_expr_num!(43), RcExpr::new(Expr::FunctionCall(unicase!("func"), vec![])), AssocOp::Divide))]
+    #[test_case("Func(2 + 1, 42)" => Expr::FunctionCall(unicase!("Func"), vec![RcExpr::new(Expr::BinaryOperator(rc_expr_num!(2), rc_expr_num!(1), AssocOp::Add)), rc_expr_num!(42)]))]
+    #[test_case(" IIF (  ISLIKE(@var0, \"hello\" ), NUMBERVALUE( @var1 ) * NUMBERVALUE( 1.5), @var2 )" => Expr::FunctionCall(unicase!("IIF"), vec![RcExpr::new(Expr::FunctionCall(unicase!("ISLIKE"), vec![rc_expr_id!("var0"), rc_expr_str!("hello")])), RcExpr::new(Expr::BinaryOperator(RcExpr::new(Expr::FunctionCall(unicase!("NUMBERVALUE"), vec![rc_expr_id!("var1")])), RcExpr::new(Expr::FunctionCall(unicase!("NUMBERVALUE"), vec![rc_expr_num!(1.5)])), AssocOp::Multiply)), rc_expr_id!("var2") ]))]
     fn parse_complexe_expressions(expression: &'static str) -> Expr {
         let expr = expr::<(&str, ErrorKind)>(expression);
         match expr {

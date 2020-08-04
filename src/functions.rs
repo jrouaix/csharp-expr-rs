@@ -9,7 +9,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use unicase::UniCase;
 
-fn exec_vec_is_null(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String> {
+fn get_rc_empty_string() -> Rc<String> {
+    Rc::new(String::with_capacity(0))
+}
+
+fn exec_vec_is_null(params: &SliceRcExpr, values: &IdentifierValues) -> Result<bool, String> {
     match params.len() {
         0 => Ok(true),
         1 => exec_expr_is_null(params.get(0).unwrap(), values),
@@ -25,7 +29,7 @@ fn exec_expr_is_null(expr: &RcExpr, values: &IdentifierValues) -> Result<bool, S
 fn expr_result_is_null(result: &ExprResult) -> bool {
     match result {
         ExprResult::Null => true,
-        ExprResult::Str(s) => s.is_empty() || s.chars().all(|c| is_space(c)),
+        ExprResult::Str(s) => s.is_empty() || s.chars().all(is_space),
         _ => false,
     }
 }
@@ -38,15 +42,15 @@ fn results_are_equals(left: &ExprResult, right: &ExprResult) -> bool {
     }
 }
 
-fn result_to_string(expr: &ExprResult) -> Result<String, String> {
+fn result_to_string(expr: &ExprResult) -> Result<Rc<String>, String> {
     if expr.is_final() {
-        Ok(expr.to_string())
+        Ok(expr.to_rc_string())
     } else {
         Err("Can't change this expression to string".to_string())
     }
 }
 
-fn exec_expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<String, String> {
+fn exec_expr_to_string(expr: &RcExpr, values: &IdentifierValues) -> Result<Rc<String>, String> {
     let res = exec_expr(expr, values)?;
     result_to_string(&res)
 }
@@ -56,14 +60,14 @@ fn exec_expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator:
     if let ExprResult::Num(n) = res {
         Ok(n)
     } else {
-        let mut s = exec_expr_to_string(expr, values)?;
+        let mut s = exec_expr_to_string(expr, values)?.to_string();
         // if s.is_empty() {
         //     return Ok(dec!(0));
         // }
         if let Some(c) = decimal_separator {
             s = s.replace(c, ".")
         } else {
-            // ok it's dummy but works our use cases
+            // ok it's dummy but works in our use cases
             if s.contains(",") && !s.contains(".") {
                 s = s.replace(",", ".")
             }
@@ -210,7 +214,7 @@ fn exec_expr_to_date(
     Ok(date_time)
 }
 
-fn assert_exact_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Result<(), String> {
+fn assert_exact_params_count(params: &SliceRcExpr, count: usize, f_name: &str) -> Result<(), String> {
     if params.len() == count {
         Ok(())
     } else {
@@ -218,7 +222,7 @@ fn assert_exact_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> 
     }
 }
 
-fn assert_max_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Result<(), String> {
+fn assert_max_params_count(params: &SliceRcExpr, count: usize, f_name: &str) -> Result<(), String> {
     if params.len() <= count {
         Ok(())
     } else {
@@ -226,7 +230,7 @@ fn assert_max_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Re
     }
 }
 
-fn assert_min_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Result<(), String> {
+fn assert_min_params_count(params: &SliceRcExpr, count: usize, f_name: &str) -> Result<(), String> {
     if params.len() >= count {
         Ok(())
     } else {
@@ -234,7 +238,7 @@ fn assert_min_params_count(params: &VecRcExpr, count: usize, f_name: &str) -> Re
     }
 }
 
-fn assert_between_params_count(params: &VecRcExpr, count_min: usize, count_max: usize, f_name: &str) -> Result<(), String> {
+fn assert_between_params_count(params: &SliceRcExpr, count_min: usize, count_max: usize, f_name: &str) -> Result<(), String> {
     let len = params.len();
     if len < count_min || len > count_max {
         Err(format!("Function {} should have between {} and {} parameters", f_name, count_min, count_max).to_string())
@@ -450,33 +454,33 @@ pub fn f_operators(left: RcExpr, right: RcExpr, op: AssocOp, values: &Identifier
 /**********************************/
 
 // IsNull, IsBlank
-fn f_is_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_is_null(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let res = exec_vec_is_null(params, values)?;
     Ok(ExprResult::Boolean(res))
 }
 
 // AreEquals
-fn f_are_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_are_equals(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "AreEquals")?;
     let equals = are_equals_internal(params, values)?;
     Ok(ExprResult::Boolean(equals))
 }
 
 // AreNotEquals
-fn f_are_not_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_are_not_equals(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "AreNotEquals")?;
     let equals = are_equals_internal(params, values)?;
     Ok(ExprResult::Boolean(!equals))
 }
 
-fn are_equals_internal(params: &VecRcExpr, values: &IdentifierValues) -> Result<bool, String> {
-    let left = UniCase::new(exec_expr_to_string(params.get(0).unwrap(), values)?);
-    let right = UniCase::new(exec_expr_to_string(params.get(1).unwrap(), values)?);
+fn are_equals_internal(params: &SliceRcExpr, values: &IdentifierValues) -> Result<bool, String> {
+    let left = exec_expr_to_string(params.get(0).unwrap(), values)?;
+    let right = exec_expr_to_string(params.get(1).unwrap(), values)?;
     Ok(left == right)
 }
 
 // In
-fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_in(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "In")?;
     let search = exec_expr(params.get(0).unwrap(), values)?;
     for p in params.iter().skip(1) {
@@ -489,7 +493,7 @@ fn f_in(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // InLike
-fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_in_like(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 2, "InLike")?;
     let search = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let regex = make_case_insensitive_like_regex(&search)?;
@@ -503,7 +507,7 @@ fn f_in_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // IsLike, Like
-fn f_is_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_is_like(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "IsLike")?;
     let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
@@ -511,7 +515,7 @@ fn f_is_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     Ok(ExprResult::Boolean(regex.is_match(&text)))
 }
 
-fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_first_not_null(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for p in params.iter() {
         let p_result = exec_expr(p, values)?;
         if !expr_result_is_null(&p_result) {
@@ -526,17 +530,17 @@ fn f_first_not_null(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 /**********************************/
 
 // Concatenate, Concat
-fn f_concat(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_concat(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let mut result = String::new();
     for p in params.iter() {
         let s = exec_expr_to_string(p, values)?;
         result.push_str(&s);
     }
-    Ok(ExprResult::Str(result))
+    Ok(ExprResult::Str(Rc::new(result)))
 }
 
 // Exact
-fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_exact(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Exact")?;
     let left = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let right = exec_expr_to_string(params.get(1).unwrap(), values)?;
@@ -544,7 +548,7 @@ fn f_exact(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Find
-fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_find(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 2, 3, "Find")?;
     let start_num: usize = match params.get(2) {
         None => 0,
@@ -563,7 +567,7 @@ fn f_find(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Substitute
-fn f_substitute(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_substitute(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 3, "Substitute")?;
 
     let within_text = exec_expr_to_string(params.get(0).unwrap(), values)?;
@@ -579,13 +583,13 @@ fn f_substitute(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
     }
 
     let regex = make_case_insensitive_search_regex(&find_text)?;
-    let replaced = regex.replace_all(&within_text, move |_c: &regex::Captures| replace_text.clone());
+    let replaced = regex.replace_all(&within_text, move |_c: &regex::Captures| replace_text.to_string());
 
-    Ok(ExprResult::Str(replaced.into()))
+    Ok(ExprResult::Str(Rc::new(replaced.into())))
 }
 
 // Fixed
-fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_fixed(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 1, 3, "Fixed")?;
 
     let number = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
@@ -614,63 +618,63 @@ fn f_fixed(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
         };
         result
     };
-    Ok(ExprResult::Str(result))
+    Ok(ExprResult::Str(Rc::new(result)))
 }
 
 // Left
-fn f_left(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_left(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Left")?;
     let size = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as usize;
     if size == 0 {
-        return Ok(ExprResult::Str("".to_string()));
+        return Ok(ExprResult::Str(get_rc_empty_string()));
     }
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let len = get_human_string_length(&s);
     if size >= len {
         Ok(ExprResult::Str(s))
     } else {
-        Ok(ExprResult::Str(format!("{}", s.chars().take(size).collect::<String>())))
+        Ok(ExprResult::Str(Rc::new(format!("{}", s.chars().take(size).collect::<String>()))))
     }
 }
 
 // Right
-fn f_right(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_right(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Right")?;
     let size = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as usize;
     if size == 0 {
-        return Ok(ExprResult::Str("".to_string()));
+        return Ok(ExprResult::Str(get_rc_empty_string()));
     }
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let len = get_human_string_length(&s);
     if size >= len {
         Ok(ExprResult::Str(s))
     } else {
-        Ok(ExprResult::Str(format!("{}", s.chars().skip(len - size).collect::<String>())))
+        Ok(ExprResult::Str(Rc::new(format!("{}", s.chars().skip(len - size).collect::<String>()))))
     }
 }
 
 // Mid
-fn f_mid(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_mid(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 3, "Mid")?;
     let size = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
     if size == 0 {
-        return Ok(ExprResult::Str("".to_string()));
+        return Ok(ExprResult::Str(get_rc_empty_string()));
     }
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let false_position = exec_expr_to_int(params.get(1).unwrap(), values)?.max(1);
     let position = (false_position - 1) as usize;
     let len = get_human_string_length(&s);
     if position >= len {
-        return Ok(ExprResult::Str("".to_string()));
+        return Ok(ExprResult::Str(get_rc_empty_string()));
     }
     if position == 0 && size >= len {
         Ok(ExprResult::Str(s))
     } else {
-        Ok(ExprResult::Str(format!("{}", s.chars().skip(position).take(size).collect::<String>())))
+        Ok(ExprResult::Str(Rc::new(format!("{}", s.chars().skip(position).take(size).collect::<String>()))))
     }
 }
 
-fn single_string_func<F: FnOnce(String) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
+fn single_string_func<F: FnOnce(Rc<String>) -> ExprFuncResult>(params: &SliceRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 1, f_name)?;
     let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
     func(s)
@@ -681,23 +685,23 @@ fn get_human_string_length(s: &str) -> usize {
 }
 
 // Len
-fn f_len(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_len(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "Len", |s| Ok(ExprResult::Num(ExprDecimal::from(get_human_string_length(&s)))))
 }
 
 // Lower
-fn f_lower(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_string_func(params, values, "Lower", |s| Ok(ExprResult::Str(s.to_lowercase())))
+fn f_lower(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Lower", |s| Ok(ExprResult::Str(Rc::new(s.to_lowercase()))))
 }
 
 // Upper
-fn f_upper(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_string_func(params, values, "Upper", |s| Ok(ExprResult::Str(s.to_uppercase())))
+fn f_upper(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Upper", |s| Ok(ExprResult::Str(Rc::new(s.to_uppercase()))))
 }
 
 // Trim
-fn f_trim(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
-    single_string_func(params, values, "Trim", |s| Ok(ExprResult::Str(s.trim().to_string())))
+fn f_trim(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+    single_string_func(params, values, "Trim", |s| Ok(ExprResult::Str(Rc::new(s.trim().to_string()))))
 }
 
 fn is_punctuation(c: char) -> bool {
@@ -711,34 +715,34 @@ fn is_sentence_punctuation(c: char) -> bool {
 }
 
 // FirstWord
-fn f_first_word(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_first_word(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "FirstWord", |s| {
         let position = s.chars().position(|c| is_space(c) || is_punctuation(c));
         match position {
             None => Ok(ExprResult::Str(s)),
-            Some(i) => Ok(ExprResult::Str(format!("{}", &s[..i]))),
+            Some(i) => Ok(ExprResult::Str(Rc::new(format!("{}", &s[..i])))),
         }
     })
 }
 
 // Text
-fn f_text(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_text(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "Text", |s| Ok(ExprResult::Str(s)))
 }
 
 // FirstSentence
-fn f_first_sentence(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_first_sentence(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "FirstSentence", |s| {
         let position = s.chars().position(|c| is_sentence_punctuation(c));
         match position {
             None => Ok(ExprResult::Str(s)),
-            Some(i) => Ok(ExprResult::Str(format!("{}", &s[..i + 1]))),
+            Some(i) => Ok(ExprResult::Str(Rc::new(format!("{}", &s[..i + 1])))),
         }
     })
 }
 
 // Capitalize
-fn f_capitalize(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_capitalize(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_string_func(params, values, "Capitalize", |s| {
         let (_, result) = s.chars().into_iter().fold((true, String::with_capacity(s.capacity())), |state, c| {
             let (should_capitalize, mut s) = state;
@@ -760,26 +764,26 @@ fn f_capitalize(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult
             }
         });
 
-        Ok(ExprResult::Str(result))
+        Ok(ExprResult::Str(Rc::new(result)))
     })
 }
 
 // Split
-fn f_split(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_split(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 3, "Split")?;
-    let s = exec_expr_to_string(params.get(0).unwrap(), values)?;
-    let separator = exec_expr_to_string(params.get(1).unwrap(), values)?;
+    let s = exec_expr_to_string(params.get(0).unwrap(), values)?.to_string();
+    let separator = exec_expr_to_string(params.get(1).unwrap(), values)?.to_string();
     let index = exec_expr_to_int(params.get(2).unwrap(), values)?.max(0) as usize;
     let parts: Vec<&str> = s.split(&separator).collect();
     let result = match parts.get(index) {
         None => ExprResult::Null,
-        Some(p) => ExprResult::Str(p.to_string()),
+        Some(p) => ExprResult::Str(Rc::new(p.to_string())),
     };
     Ok(result)
 }
 
 // NumberValue
-fn f_number_value(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_number_value(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 1, 2, "NumberValue")?;
     let separator = match params.get(1) {
         None => None,
@@ -791,7 +795,7 @@ fn f_number_value(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResu
 }
 
 // StartsWith
-fn f_starts_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_starts_with(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "StartsWith")?;
     let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
@@ -817,7 +821,7 @@ fn f_starts_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResul
 }
 
 // EndsWith
-fn f_ends_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_ends_with(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "EndsWith")?;
     let text = exec_expr_to_string(params.get(0).unwrap(), values)?;
     let search = exec_expr_to_string(params.get(1).unwrap(), values)?;
@@ -843,7 +847,7 @@ fn f_ends_with(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult 
 }
 
 // ReplaceEquals
-fn f_replace_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_replace_equals(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 4, "ReplaceEquals")?;
     if params.len() % 2 == 1 {
         return Err("Remplacement key/value parameters must come 2 by 2".to_string());
@@ -871,7 +875,7 @@ fn f_replace_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 }
 
 // ReplaceLike
-fn f_replace_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_replace_like(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_min_params_count(params, 4, "ReplaceLike")?;
     if params.len() % 2 == 1 {
         return Err("Remplacement key/value parameters must come 2 by 2".to_string());
@@ -903,7 +907,7 @@ fn f_replace_like(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResu
 /**********************************/
 
 // And
-fn f_and(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_and(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for expr in params {
         let b = exec_expr_to_bool(expr, values)?;
         if !b {
@@ -914,7 +918,7 @@ fn f_and(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Or
-fn f_or(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_or(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     for expr in params {
         let b = exec_expr_to_bool(expr, values)?;
         if b {
@@ -925,13 +929,13 @@ fn f_or(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Not
-fn f_not(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_not(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 1, "Not")?;
     Ok(ExprResult::Boolean(!exec_expr_to_bool(params.get(0).unwrap(), values)?))
 }
 
 // Xor
-fn f_xor(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_xor(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Xor")?;
     let p0 = exec_expr_to_bool(params.get(0).unwrap(), values)?;
     let p1 = exec_expr_to_bool(params.get(1).unwrap(), values)?;
@@ -939,7 +943,7 @@ fn f_xor(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Iif, If
-fn f_iif(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_iif(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 3, "Iif")?;
     let test = exec_expr_to_bool(params.get(0).unwrap(), values)?;
     exec_expr(params.get(if test { 1 } else { 2 }).unwrap(), values)
@@ -950,14 +954,14 @@ fn f_iif(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 /**********************************/
 
 // Abs
-fn f_abs(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_abs(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 1, "Abs")?;
     let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     Ok(ExprResult::Num(num.abs()))
 }
 
 // Product
-fn f_product(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_product(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let mut result = ExprDecimal::from(1);
     for expr in params.iter() {
         let i = exec_expr_to_num(expr, values, None)?;
@@ -968,7 +972,7 @@ fn f_product(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Sum
-fn f_sum(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_sum(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     let mut result = ExprDecimal::from(0);
     for expr in params.iter() {
         let i = exec_expr_to_num(expr, values, None)?;
@@ -979,7 +983,7 @@ fn f_sum(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Divide
-fn f_divide(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_divide(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Divide")?;
     let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let divisor = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
@@ -988,7 +992,7 @@ fn f_divide(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Subtract
-fn f_subtract(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_subtract(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Subtract")?;
     let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let sub = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
@@ -997,7 +1001,7 @@ fn f_subtract(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Mod, Modulo
-fn f_mod(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_mod(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Mod")?;
     let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let divisor = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
@@ -1006,7 +1010,7 @@ fn f_mod(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
 }
 
 // Round
-fn f_round(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_round(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "Round")?;
     let num = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let digits = exec_expr_to_int(params.get(1).unwrap(), values)?.max(0) as u32;
@@ -1015,7 +1019,7 @@ fn f_round(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     Ok(ExprResult::Num(result))
 }
 
-fn simple_operator<F: FnOnce(ExprDecimal, ExprDecimal) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
+fn simple_operator<F: FnOnce(ExprDecimal, ExprDecimal) -> ExprFuncResult>(params: &SliceRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 2, f_name)?;
     let num_a = exec_expr_to_num(params.get(0).unwrap(), values, None)?;
     let num_b = exec_expr_to_num(params.get(1).unwrap(), values, None)?;
@@ -1023,22 +1027,22 @@ fn simple_operator<F: FnOnce(ExprDecimal, ExprDecimal) -> ExprFuncResult>(params
 }
 
 // GreaterThan, Gt
-fn f_greater_than(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_greater_than(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     simple_operator(params, values, "GreaterThan", |a, b| Ok(ExprResult::Boolean(a > b)))
 }
 
 // LowerThan, Lt
-fn f_lower_than(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_lower_than(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     simple_operator(params, values, "LowerThan", |a, b| Ok(ExprResult::Boolean(a < b)))
 }
 
 // GreaterThanOrEqual, Gtoe
-fn f_greater_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_greater_than_or_equal(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     simple_operator(params, values, "GreaterThanOrEqual", |a, b| Ok(ExprResult::Boolean(a >= b)))
 }
 
 // LowerThanOrEqual, Ltoe
-fn f_lower_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_lower_than_or_equal(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     simple_operator(params, values, "LowerThanOrEqual", |a, b| Ok(ExprResult::Boolean(a <= b)))
 }
 
@@ -1047,27 +1051,27 @@ fn f_lower_than_or_equal(params: &VecRcExpr, values: &IdentifierValues) -> ExprF
 /**********************************/
 
 // Now
-fn f_now(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
+fn f_now(params: &SliceRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 0, "Now")?;
     Ok(ExprResult::Date(Utc::now().naive_utc()))
 }
 
 // Today
-fn f_today(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
+fn f_today(params: &SliceRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 0, "Today")?;
     let date = NaiveDateTime::new(Utc::now().date().naive_utc(), NaiveTime::from_hms(0, 0, 0));
     Ok(ExprResult::Date(date))
 }
 
 // Time
-fn f_time(params: &VecRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
+fn f_time(params: &SliceRcExpr, _values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 0, "Time")?;
     let duration = Utc::now().time().signed_duration_since(NaiveTime::from_hms(0, 0, 0));
     Ok(ExprResult::TimeSpan(duration))
 }
 
 // NowSpecificTimeZone
-fn f_now_specific_timezone(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_now_specific_timezone(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 0, 1, "NowSpecificTimeZone")?;
 
     let now = Utc::now().naive_utc();
@@ -1081,40 +1085,40 @@ fn f_now_specific_timezone(params: &VecRcExpr, values: &IdentifierValues) -> Exp
     }
 }
 
-fn single_date_func<F: FnOnce(NaiveDateTime) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
+fn single_date_func<F: FnOnce(NaiveDateTime) -> ExprFuncResult>(params: &SliceRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 1, f_name)?;
     let date = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     func(date)
 }
 
 // Date
-fn f_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_date_func(params, values, "Date", |d| Ok(ExprResult::Date(d)))
 }
 
 // Year
-fn f_year(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_year(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_date_func(params, values, "Year", |d| Ok(ExprResult::Num(ExprDecimal::from(d.year()))))
 }
 
 // Month
-fn f_month(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_month(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_date_func(params, values, "Month", |d| Ok(ExprResult::Num(ExprDecimal::from(d.month()))))
 }
 
 // Day
-fn f_day(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_day(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     single_date_func(params, values, "Day", |d| Ok(ExprResult::Num(ExprDecimal::from(d.day()))))
 }
 
-fn two_dates_func_no_defaults<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
+fn two_dates_func_no_defaults<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(params: &SliceRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_exact_params_count(params, 2, f_name)?;
     let date_left = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     let date_right = exec_expr_to_date_no_defaults(params.get(1).unwrap(), values)?;
     func(date_left, date_right)
 }
 
-fn two_dates_func<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(params: &VecRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
+fn two_dates_func<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(params: &SliceRcExpr, values: &IdentifierValues, f_name: &str, func: F) -> ExprFuncResult {
     assert_between_params_count(params, 2, 8, f_name)?;
 
     let default_year = params.get(2).map_or(Ok(false), |expr| exec_expr_to_bool(expr, values))?;
@@ -1130,7 +1134,7 @@ fn two_dates_func<F: FnOnce(NaiveDateTime, NaiveDateTime) -> ExprFuncResult>(par
 }
 
 // DateDiff
-fn f_date_diff(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_diff(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiff", |d1, d2| Ok(ExprResult::TimeSpan(d1 - d2)))
 }
 
@@ -1140,7 +1144,7 @@ pub const SECONDS_IN_DAYS: i64 = SECONDS_IN_HOURS * 24;
 // pub const SECONDS_IN_MONTHS_size: f64 = SECONDS_IN_DAYS as f64 * 30.5_f64;
 
 //DateDiffHours
-fn f_date_diff_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_diff_hours(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffHours", |d1, d2| {
         let hours = ((d1 - d2).num_seconds() / SECONDS_IN_HOURS).abs();
         Ok(ExprResult::Num(ExprDecimal::from(hours)))
@@ -1148,7 +1152,7 @@ fn f_date_diff_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncR
 }
 
 // DateDiffDays
-fn f_date_diff_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_diff_days(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffDays", |d1, d2| {
         let days = ((d1 - d2).num_seconds() / SECONDS_IN_DAYS).abs();
         Ok(ExprResult::Num(ExprDecimal::from(days)))
@@ -1156,7 +1160,7 @@ fn f_date_diff_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 }
 
 // DateDiffMonths
-fn f_date_diff_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_diff_months(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func_no_defaults(params, values, "DateDiffMonths", |d1, d2| {
         let months = ((d1.month() as i32 - d2.month() as i32) + 12 * (d1.year() - d2.year())).abs();
         Ok(ExprResult::Num(ExprDecimal::from(months)))
@@ -1164,37 +1168,37 @@ fn f_date_diff_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFunc
 }
 
 // DateEquals
-fn f_date_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_equals(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func(params, values, "DateEquals", |d1, d2| Ok(ExprResult::Boolean(d1 == d2)))
 }
 
 // DateNotEquals
-fn f_date_not_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_not_equals(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func(params, values, "DateNotEquals", |d1, d2| Ok(ExprResult::Boolean(d1 != d2)))
 }
 
 // DateLower
-fn f_date_lower(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_lower(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func(params, values, "DateLower", |d1, d2| Ok(ExprResult::Boolean(d1 < d2)))
 }
 
 // DateLowerOrEquals
-fn f_date_lower_or_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_lower_or_equals(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func(params, values, "DateLowerOrEquals", |d1, d2| Ok(ExprResult::Boolean(d1 <= d2)))
 }
 
 // DateGreater
-fn f_date_greater(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_greater(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func(params, values, "DateGreater", |d1, d2| Ok(ExprResult::Boolean(d1 > d2)))
 }
 
 // DateGreaterOrEquals
-fn f_date_greater_or_equals(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_greater_or_equals(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     two_dates_func(params, values, "DateGreaterOrEquals", |d1, d2| Ok(ExprResult::Boolean(d1 >= d2)))
 }
 
 // DateAddHours
-fn f_date_add_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_add_hours(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "DateAddHours")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     let hours = exec_expr_to_float(params.get(1).unwrap(), values, None)?;
@@ -1203,7 +1207,7 @@ fn f_date_add_hours(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
 }
 
 // DateAddDays
-fn f_date_add_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_add_days(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "DateAddDays")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     let days = exec_expr_to_float(params.get(1).unwrap(), values, None)?;
@@ -1212,7 +1216,7 @@ fn f_date_add_days(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRes
 }
 
 // DateAddMonths
-fn f_date_add_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_add_months(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "DateAddMonths")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
 
@@ -1237,7 +1241,7 @@ fn f_date_add_months(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncR
 }
 
 // DateAddYears
-fn f_date_add_years(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_add_years(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_exact_params_count(params, 2, "DateAddYears")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
     let years = exec_expr_to_int(params.get(1).unwrap(), values)? as i32;
@@ -1247,24 +1251,31 @@ fn f_date_add_years(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncRe
     Ok(ExprResult::Date(new_date_time))
 }
 
+fn get_rc_default_timezone_name() -> Rc<String> {
+    Rc::new("Romance Standard Time".into())
+}
 // LocalDate
-fn f_local_date(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_local_date(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 1, 2, "LocalDate")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    let time_zone_name = params.get(1).map_or(Ok("Romance Standard Time".into()), |expr| exec_expr_to_string(expr, values))?;
+    let time_zone_name = params.get(1).map_or(Ok(get_rc_default_timezone_name()), |expr| exec_expr_to_string(expr, values))?;
     naive_datetime_to_timezone(&date_time, &time_zone_name)
 }
 
+fn get_rc_default_date_format() -> Rc<String> {
+    Rc::new("yyyy-MM-dd HH:mm:ss.fff".into())
+}
+
 // DateFormat
-fn f_date_format(params: &VecRcExpr, values: &IdentifierValues) -> ExprFuncResult {
+fn f_date_format(params: &SliceRcExpr, values: &IdentifierValues) -> ExprFuncResult {
     assert_between_params_count(params, 1, 2, "DateFormat")?;
     let date_time = exec_expr_to_date_no_defaults(params.get(0).unwrap(), values)?;
-    let format = params.get(1).map_or(Ok("yyyy-MM-dd HH:mm:ss.fff".into()), |expr| exec_expr_to_string(expr, values))?;
+    let format = params.get(1).map_or(Ok(get_rc_default_date_format()), |expr| exec_expr_to_string(expr, values))?;
 
     let format = dotnet_format_to_strptime_format(&format);
     let result = date_time.format(&format);
 
-    Ok(ExprResult::Str(result.to_string()))
+    Ok(ExprResult::Str(Rc::new(result.to_string())))
 }
 
 #[cfg(test)]

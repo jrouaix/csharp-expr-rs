@@ -130,10 +130,11 @@ namespace csharp_expr_rs.Tests
                 Console.SetOut(sw);
 
                 var s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                var identifierValues = new Dictionary<string, string>() { { "test", s } };
-                for (int i = 0; i < 1000; i++)
+                var expression = new Expression("test");
+                for (int i = 0; i < 10000; i++)
                 {
-                    var expression = new Expression("test");
+                    var value = $"{s}{i}";
+                    var identifierValues = new Dictionary<string, string>() { { "test", value } };
                     try
                     {
                         var result = expression.Execute(identifierValues);

@@ -11,16 +11,17 @@ use std::fmt;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::rc::Rc;
+use std::sync::Arc;
 use unicase::UniCase;
 
 pub type RcExpr = Rc<Expr>;
 pub type VecRcExpr = Vec<RcExpr>;
 pub type SliceRcExpr = [RcExpr];
 pub type ExprFuncResult = Result<ExprResult, String>;
-pub type FunctionImpl = dyn Fn(&VecRcExpr, &IdentifierValues) -> ExprFuncResult;
+pub type FunctionImpl = dyn Fn(&SliceRcExpr, &IdentifierValues) -> ExprFuncResult;
 pub type FunctionImplList = HashMap<UniCase<String>, (FunctionDeterminism, Rc<FunctionImpl>)>;
-pub type IdentifierValueGetter = dyn Fn() -> String;
-pub type IdentifierValues = HashMap<UniCase<String>, Box<IdentifierValueGetter>>;
+pub type IdentifierValueGetter = dyn Fn() -> Rc<String>;
+pub type IdentifierValues = HashMap<String, Box<IdentifierValueGetter>>;
 pub type ExprDecimal = Decimal;
 
 pub trait BinaryOperatorsImpl: Fn(RcExpr, RcExpr, AssocOp, &IdentifierValues) -> ExprFuncResult {}
@@ -109,15 +110,15 @@ pub enum Expr {
     Num(ExprDecimal),                                                             // 123.45
     Null,                                                                         // null
     Identifier(String),                                                           // varToto
-    FunctionCall(String, VecRcExpr),                                              // func(42, "text")
-    PreparedFunctionCall(String, VecRcExpr, Rc<FunctionImpl>),                    // func(42, "text") + *func()
+    FunctionCall(UniCase<String>, VecRcExpr),                                     // func(42, "text")
+    PreparedFunctionCall(UniCase<String>, VecRcExpr, Rc<FunctionImpl>),           // func(42, "text") + *func()
     BinaryOperator(RcExpr, RcExpr, AssocOp),                                      // 32 + 10
     PreparedBinaryOperator(RcExpr, RcExpr, AssocOp, Rc<dyn BinaryOperatorsImpl>), // 32 + 10 + *operators()
 }
 
 #[derive(Clone, Debug)]
 pub enum ExprResult {
-    Str(String),
+    Str(Rc<String>),
     Boolean(bool),
     Num(ExprDecimal),
     Date(NaiveDateTime),
@@ -240,6 +241,14 @@ impl ExprResult {
             _ => true,
         }
     }
+
+    pub fn to_rc_string(&self) -> Rc<String> {
+        match self {
+            ExprResult::Str(s) => s.clone(),
+            ExprResult::Boolean(b) => Rc::new(b.to_string()),
+            _ => Rc::new(self.to_string()),
+        }
+    }
 }
 
 pub fn parse_expr(expression: &str) -> Result<Expr, String> {
@@ -280,7 +289,7 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
             identifiers.insert(name.clone());
             (FunctionDeterminism::Deterministic, expr)
         }
-        Expr::FunctionCall(name, parameters) => match &funcs.get(&UniCase::new(name.into())) {
+        Expr::FunctionCall(name, parameters) => match &funcs.get(&name) {
             Some(fnc) => {
                 let (params_determinism, prepared_list) = prepare_expr_list(parameters, funcs, identifiers, operators);
                 (fnc.0 + params_determinism, Rc::new(Expr::PreparedFunctionCall(name.clone(), prepared_list, Rc::clone(&fnc.1))))
@@ -306,11 +315,11 @@ pub fn prepare_expr(expr: RcExpr, funcs: &FunctionImplList, identifiers: &mut Ha
 
 pub fn exec_expr<'a>(expr: &'a RcExpr, values: &'a IdentifierValues) -> Result<ExprResult, String> {
     match expr.as_ref() {
-        Expr::Str(s) => Ok(ExprResult::Str(s.clone())),
+        Expr::Str(s) => Ok(ExprResult::Str(Rc::new(s.clone()))),
         Expr::Boolean(b) => Ok(ExprResult::Boolean(*b)),
         Expr::Num(f) => Ok(ExprResult::Num(*f)),
         Expr::Null => Ok(ExprResult::Null),
-        Expr::Identifier(name) => match &values.get(&UniCase::new(name.into())) {
+        Expr::Identifier(name) => match &values.get(name) {
             Some(s) => Ok(ExprResult::Str(s())),
             None => Err(format!("Unable to find value for identifier named '{}'", name)),
         },
@@ -373,7 +382,7 @@ mod tests {
         let mut funcs = FunctionImplList::new();
         funcs.insert(
             UniCase::new("knownFunc".to_string()),
-            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42)))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &SliceRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42)))),
         );
         let expr = prepare_expr_and_identifiers(expr, &funcs, Rc::new(null_op));
         let mut result = expr.identifiers_names.iter().cloned().collect::<Vec<String>>();
@@ -388,21 +397,21 @@ mod tests {
             UniCase::new("first".to_string()),
             (
                 FunctionDeterminism::Deterministic,
-                Rc::new(|v: &VecRcExpr, _: &IdentifierValues| v.first().map_or_else(|| Err("There was no first value.".to_string()), |x| Ok(ExprResult::NonExecuted(x.clone())))),
+                Rc::new(|v: &SliceRcExpr, _: &IdentifierValues| v.first().map_or_else(|| Err("There was no first value.".to_string()), |x| Ok(ExprResult::NonExecuted(x.clone())))),
             ),
         );
 
         funcs.insert(
             UniCase::new("forty_two".to_string()),
-            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42)))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &SliceRcExpr, _: &IdentifierValues| Ok(exprresult_num!(42)))),
         );
         funcs.insert(
             UniCase::new("forty_two_str".to_string()),
-            (FunctionDeterminism::Deterministic, Rc::new(|_v: &VecRcExpr, _: &IdentifierValues| Ok(exprresult_str!("42".to_string())))),
+            (FunctionDeterminism::Deterministic, Rc::new(|_v: &SliceRcExpr, _: &IdentifierValues| Ok(exprresult_str!(Rc::new("42".to_string()))))),
         );
 
         let mut values = IdentifierValues::new();
-        values.insert("my".into(), Box::new(|| "value".to_string()));
+        values.insert("my".into(), Box::new(|| Rc::new("value".to_string())));
 
         let expression = "first(fiRst(FIRST(my,2,3),2,3),2,3)";
         let result = parse_exec_expr(expression, &funcs, &values, Rc::new(null_op));

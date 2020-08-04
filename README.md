@@ -45,13 +45,13 @@ c# expression parser in Rust
 - [x] Handle timezones & day light save hours (thank you chrono-tz !)
 - [x] sp() should get the new lines and allow the parsing to continue
 - [x] Make C# FFI 1 char strings to Rust
-- [ ] Handle operators precedence !
-- [ ] Replace &Vec usage by slices (have a look at f_operators)
+- [x] Replace &Vec usage by slices (have a look at f_operators)
+- [x] Handle non usefull parenthesis (some tests to uncomment)
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
-- [ ] Make all default String lazy static or &str
-- [ ] Box strings to avoid cloning them
+- [x] Rc strings to avoid cloning them
+- [ ] Rc strings and avoid read them multiple times when variable value used multiple times
 - [ ] comment out or remove dbg!()
-- [ ] Handle non usefull parenthesis (some tests to uncomment)
+- [ ] Handle operators precedence !
 - [ ] Debug snake case identifiers parsing
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing

@@ -119,8 +119,8 @@ extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *co
     let mut values = IdentifierValues::new();
     for ikv in vals.iter() {
         let k = string_from_c_char_ptr(ikv.key).unwrap();
-        let get_v = Box::new(move || string_from_csharp(ikv.value));
-        values.insert(UniCase::new(k), get_v);
+        let get_v = Box::new(move || Rc::new(string_from_csharp(ikv.value)));
+        values.insert(k, get_v);
     }
 
     let result = exec_expr(&expr.expr, &values);
