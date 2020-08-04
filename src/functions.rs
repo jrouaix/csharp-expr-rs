@@ -72,7 +72,7 @@ fn exec_expr_to_num(expr: &RcExpr, values: &IdentifierValues, decimal_separator:
                 s = s.replace(",", ".")
             }
         }
-        let n: ExprDecimal = s.parse().or_else(|_| Err(format!("The value '{}' is not a number.", s)))?;
+        let n: ExprDecimal = s.parse().or_else(|_| Err(format!("The value '{}' is not a number.", exec_expr_to_string(expr, values)?)))?;
         Ok(n)
     }
 }

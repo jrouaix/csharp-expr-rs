@@ -1,6 +1,7 @@
 use crate::expressions::*;
 
 use once_cell::sync::Lazy;
+use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
@@ -104,6 +105,29 @@ pub struct FFIExecResult {
     content: *mut c_char,
 }
 
+struct IdentifierStringValueLazyGetter {
+    value_ptr: *const c_char,
+    value: Option<Rc<String>>,
+}
+
+impl IdentifierStringValueLazyGetter {
+    fn new(value_ptr: *const c_char) -> IdentifierStringValueLazyGetter {
+        IdentifierStringValueLazyGetter { value_ptr, value: None }
+    }
+
+    fn get_value(&mut self) -> Rc<String> {
+        match &self.value {
+            Some(rc) => rc.clone(),
+            None => {
+                let s = string_from_csharp(self.value_ptr);
+                let rc = Rc::new(s);
+                self.value = Some(rc.clone());
+                rc
+            }
+        }
+    }
+}
+
 #[no_mangle]
 extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *const IdentifierKeyValue, identifier_values_len: usize) -> FFIExecResult {
     let expr = unsafe {
@@ -119,11 +143,13 @@ extern "C" fn ffi_exec_expr(ptr: *mut ExprAndIdentifiers, identifier_values: *co
     let mut values = IdentifierValues::new();
     for ikv in vals.iter() {
         let k = string_from_c_char_ptr(ikv.key).unwrap();
-        let get_v = Box::new(move || Rc::new(string_from_csharp(ikv.value)));
+        let lazy_getter = IdentifierStringValueLazyGetter::new(ikv.value);
+        let lazy_refcell = RefCell::new(lazy_getter);
+        let get_v = Box::new(move || lazy_refcell.borrow_mut().get_value());
         values.insert(k, get_v);
     }
 
-    let result = exec_expr(&expr.expr, &values);
+    let result = exec_expr(&expr.expr, &mut values);
 
     match result {
         Ok(r) => FFIExecResult {

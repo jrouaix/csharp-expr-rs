@@ -50,13 +50,13 @@ c# expression parser in Rust
 - [ ] Turn all possible overflow problems in casts (isize as u32, i32 ....) to nice errors
 - [x] Rc strings to avoid cloning them
 - [x] Rc and lazy load variable values and avoid read them multiple times when used multiple times
+- [x] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/
 - [ ] comment out or remove dbg!()
 - [ ] Handle operators precedence !
 - [ ] Debug snake case identifiers parsing
 - [ ] Debug Identifiers (Some tests are not passing)
 - [ ] More perf benchmarks with arguments passing
 - [ ] Return the right result type throught FFI
-- [ ] Optimisation : lazy evaluation for identifier value getters ? https://docs.rs/once_cell/1.2.0/once_cell/
 - [ ] Error handling on expressions parsing
 - [ ] Modularisation, so anyone can implement their own functions list
 - [ ] Allow passing functions from dotnet side to be called from rust expression ?    // see System.Runtime.InteropServices.AllowReversePInvokeCallsAttribute
