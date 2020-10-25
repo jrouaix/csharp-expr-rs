@@ -46,7 +46,7 @@ fn string<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a st
 }
 
 fn boolean<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, bool, E> {
-    context("boolean", alt((map(tag("false"), |_| false), map(tag("true"), |_| true))))(input)
+    alt((map(tag("false"), |_| false), map(tag("true"), |_| true)))(input)
 }
 
 fn null<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Expr, E> {
